@@ -7,12 +7,13 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Rect
 import android.media.MediaPlayer
-import android.net.Uri
+import android.os.Build
 import android.speech.tts.Voice
+import android.text.Html
+import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.util.Log
 import android.widget.Toast
-import androidx.activity.result.launch
 import androidx.annotation.WorkerThread
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.graphics.toColorInt
@@ -22,12 +23,11 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.await
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.request.Disposable
 import coil3.request.ImageRequest
-import com.fasterxml.jackson.annotation.JsonFormat
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.google.android.gms.tasks.Tasks
@@ -37,7 +37,6 @@ import com.google.mlkit.nl.translate.TranslateRemoteModel
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
-import com.lagradost.nicehttp.NiceResponse
 import com.lagradost.quicknovel.BaseApplication.Companion.context
 import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BaseApplication.Companion.getKeyClass
@@ -73,6 +72,7 @@ import com.lagradost.quicknovel.util.CoilImagesPlugin
 import com.lagradost.quicknovel.util.CoilImagesPlugin.CoilStore
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.Coroutines.runOnMainThread
+import com.lagradost.quicknovel.util.GoogleTranslateOnline
 import com.lagradost.safefile.closeQuietly
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
@@ -105,7 +105,6 @@ import java.util.Locale
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
-import kotlin.math.pow
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty
 
@@ -296,6 +295,123 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
     }
 }
 
+class RegularBook(val data: EpubBook) : AbstractBook() {private val allTocReferences: List<TOCReference>
+
+    init {
+        val flatTOC = mutableListOf<TOCReference>()
+        fun flatten(refs: List<TOCReference>) {
+            for (ref in refs) {
+                flatTOC.add(ref)
+                if (ref.children != null && ref.children.isNotEmpty()) {
+                    flatten(ref.children)
+                }
+            }
+        }
+        flatten(data.tableOfContents.tocReferences)
+
+        allTocReferences = if (flatTOC.size <= 1) {
+            data.spine.spineReferences
+                .filter { it.isLinear }
+                .mapIndexed { index, spineRef ->
+                    val res = spineRef.resource
+                    TOCReference(res.title ?: "Chapter ${index + 1}", res)
+                }
+        } else {
+            flatTOC
+        }
+    }
+
+    override val canReload = false
+
+    override fun author(): String? {
+        val author = data.metadata.authors.firstOrNull() ?: return null
+        return listOfNotNull(author.firstname, author.lastname).joinToString(" ").ifBlank { null }
+    }
+
+    override fun loadImage(image: String): ByteArray? {
+        data.resources.resourceMap[image]?.data?.let { return it }
+        val fileName = image.substringAfterLast("/")
+        return data.resources.resourceMap.values.find { it.href.endsWith(fileName) }?.data
+    }
+
+    override fun size(): Int = allTocReferences.size
+
+    override fun title(): String = data.title ?: "Unknown Book"
+
+    override fun getChapterTitle(index: Int): UiText {
+        return allTocReferences.getOrNull(index)?.title?.toUiText()
+            ?: txt(R.string.chapter_format, (index + 1).toString())
+    }
+
+    override fun getLoadingStatus(index: Int): String? = null
+
+    override suspend fun getChapterData(index: Int, reload: Boolean): String {
+        val currentRef = allTocReferences.getOrNull(index) ?: return ""
+        val spine = data.spine
+
+        val startIdx = spine.getResourceIndex(currentRef.resource)
+
+        val nextRef = allTocReferences.getOrNull(index + 1)
+        val nextChapterStartIdx = nextRef?.let { spine.getResourceIndex(it.resource) }
+            ?: spine.spineReferences.size
+
+        val builder = StringBuilder()
+
+        val endIdx = if (nextChapterStartIdx < startIdx) startIdx + 1 else nextChapterStartIdx
+        val actualEndIdx = maxOf(startIdx + 1, endIdx)
+
+        for (i in startIdx until actualEndIdx) {
+            if (i >= spine.spineReferences.size) break
+
+            try {
+                val ref = spine.spineReferences[i]
+
+                // Si el recurso no es lineal y no es el inicio explícito de este capítulo, saltar
+                if (!ref.isLinear && i != startIdx) continue
+
+                val html = ref.resource.reader.readText()
+                val doc = Jsoup.parse(html)
+                val basePath = ref.resource.href.substringBeforeLast("/", "")
+
+                doc.select("img, image").forEach { img ->
+                    val attrName = if (img.tagName() == "image") "xlink:href" else "src"
+                    val src = img.attr(attrName)
+                    if (src.isNotEmpty() && !src.startsWith("http") && !src.startsWith("data:")) {
+                        img.attr(attrName, resolveRelativePath(basePath, src))
+                    }
+                }
+
+                builder.append(doc.body().html())
+            } catch (t: Throwable) {
+                logError(t)
+            }
+        }
+        return builder.toString()
+    }
+
+    private fun resolveRelativePath(basePath: String, relativePath: String): String {
+        val cleanRelative = relativePath.substringBefore("?").substringBefore("#")
+        val fullPath = if (basePath.isEmpty()) cleanRelative else "$basePath/$cleanRelative"
+
+        val parts = fullPath.split("/")
+        val resolvedParts = mutableListOf<String>()
+
+        for (part in parts) {
+            when (part) {
+                "", "." -> continue
+                ".." -> if (resolvedParts.isNotEmpty()) resolvedParts.removeAt(resolvedParts.size - 1)
+                else -> resolvedParts.add(part)
+            }
+        }
+        return resolvedParts.joinToString("/")
+    }
+
+    override fun expand(last: String): Boolean = false
+
+    override suspend fun posterBytes(): ByteArray? = data.coverImage?.data
+}
+
+/*
 class RegularBook(val data: EpubBook) : AbstractBook() {
     init {
         var refs = mutableListOf<TOCReference>()
@@ -333,10 +449,9 @@ class RegularBook(val data: EpubBook) : AbstractBook() {
     }
 
     override fun loadImage(image: String): ByteArray? {
+        data.resources.resourceMap[image]?.data?.let { return it }
         return data.resources.resourceMap.values.find { x ->
-            x.mediaType.name.contains("image") && image.endsWith(
-                x.href
-            )
+            x.href.endsWith(image) || image.endsWith(x.href)
         }?.data
     }
 
@@ -358,36 +473,89 @@ class RegularBook(val data: EpubBook) : AbstractBook() {
     }
 
     override suspend fun getChapterData(index: Int, reload: Boolean): String {
-        val start = data.tableOfContents.tocReferences[index].resource
-        val startIdx = data.spine.getResourceIndex(start)
+        val tocReferences = data.tableOfContents.tocReferences
+        val spine = data.spine
 
-        val end = data.tableOfContents.tocReferences.getOrNull(index + 1)?.resource
-        var endIdx = data.spine.getResourceIndex(end)
-        if (endIdx == -1) {
-            endIdx = data.spine.size()
-        }
+        val startIdx = spine.getResourceIndex(tocReferences[index].resource)
+        val endIdx =
+            if (index + 1 < tocReferences.size)
+                spine.getResourceIndex(tocReferences[index + 1].resource)
+            else
+                spine.spineReferences.size
+
+
         val builder = StringBuilder()
         for (i in startIdx until endIdx) {
-            try//this is for corrupted epubs like from annasarchive
-            {
-                val ref = data.spine.spineReferences[i]
-                // I have no idea, but nonlinear = stop?
-                if (!ref.isLinear && i != startIdx) {
-                    break
+            try {
+                val ref = spine.spineReferences[i]
+                if (!ref.isLinear && i != startIdx) continue
+
+                val html = ref.resource.reader.readText()
+                val doc = Jsoup.parse(html)
+
+                val currentHref = ref.resource.href
+                val basePath = currentHref.substringBeforeLast("/", "")
+
+                doc.select("img").forEach { img ->
+                    val src = img.attr("src")
+                    if (!src.startsWith("http") && !src.startsWith("data:")) {
+                        val absolutePath = resolveRelativePath(basePath, src)
+                        img.attr("src", absolutePath)
+                    }
                 }
-                /*
-                    Somewhere in the code, when generating the EPUB of whatever, it changes the root,
-                    so it can’t find other resources for some reason. Since the code is already huge,
-                    I have no idea where that happens, so I resort to a sketchy fix.
-                */
-                builder.append(ref.resource.reader.readText().replace(Regex("""src="(?!OEBPS/|http)"""), "src=\"OEBPS/"))
-            }
-            catch (t: Throwable){
+
+                builder.append(doc.body().html())
+            } catch (t: Throwable) {
                 logError(t)
             }
         }
+        return builder.toString()
+    }
+
+
+/*
+        override suspend fun getChapterData(index: Int, reload: Boolean): String {
+        val tocReferences = data.tableOfContents.tocReferences
+        val resource = tocReferences[index].resource
+
+        val builder = StringBuilder()
+        try {
+            val html = resource.reader.readText()
+            val doc = Jsoup.parse(html)
+
+            val currentHref = resource.href
+            val basePath = currentHref.substringBeforeLast("/", "")
+
+            doc.select("img").forEach { img ->
+                val src = img.attr("src")
+                if (!src.startsWith("http") && !src.startsWith("data:")) {
+                    val absolutePath = resolveRelativePath(basePath, src)
+                    img.attr("src", absolutePath)
+                }
+            }
+            builder.append(doc.body().html())
+        } catch (t: Throwable) {
+            logError(t)
+        }
 
         return builder.toString()
+    }
+ */
+
+
+    private fun resolveRelativePath(basePath: String, relativePath: String): String {
+        val fullPath = if (basePath.isEmpty()) relativePath else "$basePath/$relativePath"
+        val parts = fullPath.split("/")
+        val resolvedParts = mutableListOf<String>()
+
+        for (part in parts) {
+            when (part) {
+                "." -> continue
+                ".." -> if (resolvedParts.isNotEmpty()) resolvedParts.removeAt(resolvedParts.size - 1)
+                else -> resolvedParts.add(part)
+            }
+        }
+        return resolvedParts.joinToString("/")
     }
 
     override fun expand(last: String): Boolean {
@@ -399,6 +567,8 @@ class RegularBook(val data: EpubBook) : AbstractBook() {
     }
 }
 
+
+ */
 class MLException(cause: Throwable) : Exception(cause)
 
 data class LiveChapterData(
@@ -548,6 +718,11 @@ class ReadActivityViewModel : ViewModel() {
     var currentIndex = Int.MIN_VALUE
         private set
 
+
+    private var initPaddingTop = 0
+    private var initPaddingBottom = 1
+
+
     /** lower padding for preloading current-chapterPaddingBottom*/
     private var chapterPaddingBottom: Int = 1
 
@@ -591,26 +766,49 @@ class ReadActivityViewModel : ViewModel() {
         notify: Boolean = true,
         postLoading: Boolean = false,
     ) {
-        for (idx in index - chapterPaddingBottom..index + chapterPaddingTop) {
+        val range =
+            if(!notify) (index - initPaddingBottom..index + initPaddingTop)
+            else (index - chapterPaddingBottom..index + chapterPaddingTop)
+        for (idx in range) {
             requested += index
-            loadIndividualChapter(idx, reload = false, notify = notify, postLoading = postLoading)
+            loadIndividualChapter(idx, notify = notify, postLoading = postLoading)
         }
+
     }
 
     private fun updateIndex(index: Int) {
         var alreadyRequested = false
-        for (idx in index - chapterPaddingBottom..index + chapterPaddingTop) {
-            if (!requested.contains(index)) {
-                alreadyRequested = true
-            }
-            requested += index
+        if (!requested.contains(index)) {
+            alreadyRequested = true
         }
-
+        requested += index
         if (alreadyRequested) return
 
         ioSafe {
             updateIndexAsync(index)
         }
+    }
+
+    fun onScroll(visibility: ScrollVisibilityIndex?) {
+        if (visibility == null) return
+        // dynamically increase padding in case of very small chapters with a maximum of 10 chapters
+        val first = visibility.firstInMemory.index
+        val last = visibility.lastInMemory.index
+        chapterPaddingTop = minOf(10, maxOf(chapterPaddingTop, (last - first) + 1))
+
+        val current = currentIndex
+
+        val save = visibility.firstFullyVisible ?: visibility.firstInMemory
+        desiredTTSIndex = visibility.firstFullyVisibleUnderLine?.toScroll()
+        changeIndex(save.toScroll())
+
+        // update the read area if changed index
+        if (current != save.index)
+            updateReadArea()
+
+        // load forwards and backwards
+        updateIndex(visibility.firstInMemory.index)
+        updateIndex(visibility.lastInMemory.index)
     }
 
     private fun chapterIdxToSpanDisplay(index: Int): List<SpanDisplay> {
@@ -905,110 +1103,106 @@ class ReadActivityViewModel : ViewModel() {
     ): Pair<Spanned, ArrayList<TextSpan>> {
         try {
             val currentSettings = mlSettings
-            if (spans.isEmpty() || currentSettings.isInvalid()) {
-                return text to spans
-            }
+            if (spans.isEmpty() || currentSettings.isInvalid()) return text to spans
+            val builder = SpannableStringBuilder()
+            val out = ArrayList<TextSpan>()
+            val textHash = hashString(
+                text.trim().toString().toByteArray()
+            )
+            val filePrefix = "ml_${textHash}.${currentSettings.from}_to_${currentSettings.to}.${
+                if (currentSettings.useOnlineTranslation) "online" 
+                else "offline"
+            }"
 
-            // the file
-            val filePrefix =
-                "ml_${
-                    hashString(
-                        text.trim().toString().toByteArray()
-                    )
-                }.${currentSettings.from}_to_${currentSettings.to}.${if (currentSettings.useOnlineTranslation) "online" else "offline"}"
-
-            Log.i(TAG, "Translating $filePrefix")
-
-            // read from cache if it exists
-            // we assume that parseTextToSpans is equivalent from restoring from the builder
-            // aka out == parseTextToSpans(builder)
-            safe {
-                context?.cacheDir?.let {
-                    val cache = File(it, "$filePrefix.txt")
+            //Try to use cache
+            val cachedData = safe {
+                context?.cacheDir?.let { dir ->
+                    val cache = File(dir, "$filePrefix.txt")
                     if (cache.exists()) {
                         Log.i(TAG, "Cache exists for $filePrefix")
-                        val mlText = cache.readText().toSpanned()
-                        return@safe mlText to parseTextToSpans(mlText, spans[0].index)
+                        val lines = cache.readLines()
+                        spans.forEachIndexed { i, originalSpan ->
+                            val hasImage = originalSpan.text.getSpans<AsyncDrawableSpan>().isNotEmpty()
+                            val finalText =
+                                if (hasImage)
+                                    originalSpan.text
+                                else
+                                    lines[i].toSpanned()
+                            val start = builder.length
+                            builder.append(finalText)
+                            val end = builder.length
+                            builder.append('\n')
+                            out.add(TextSpan(finalText, start, end, originalSpan.index, originalSpan.innerIndex))
+                        }
+                        return@safe builder to out
                     }
                 }
-                null
-            }?.let { return it }
+                return@safe null
+            }
+            if(cachedData != null) return cachedData
 
-            val builder = StringBuilder()
-            val out = ArrayList<TextSpan>()
-            val separator = "\n\n" // Use double line breaks to separate paragraphs within the batch
+            // --- Online mode ---
             if (currentSettings.useOnlineTranslation) {
-                // --- Online mode ---
-                val batchSize = 5
-                for (i in 0 until spans.size step batchSize) {
-                    loading.invoke(Triple(spans[i].index, i, spans.size))
-                    val batch = spans.subList(i, minOf(i + batchSize, spans.size))
-                    val combinedText = batch.joinToString(separator) { it.text.toString() }
-                    val translatedBatch = onlineTranslate(combinedText, currentSettings.from,currentSettings.to)
-                    val translatedParagraphs = translatedBatch.split(separator)
-
-                    for (j in batch.indices) {
-                        val finalText =
-                            translatedParagraphs.getOrNull(j) ?: batch[j].text.toString()
-
-                        val start = builder.length
-                        builder.append(finalText)
-                        val end = builder.length
-                        builder.append('\n')
-                        out.add(
-                            TextSpan(
-                                finalText.toSpanned(),
-                                start,
-                                end,
-                                batch[j].index,
-                                batch[j].innerIndex
-                            )
-                        )
-                    }
+                val translator = GoogleTranslateOnline { progress, total ->
+                    loading.invoke(Triple(spans[0].index, progress, total))
                 }
-            } else {
-                val translator = mlTranslator
-                if(translator == null) {
-                    return text to spans
-                }
-                // --- Offline mode ---
-                for (i in spans.indices) {
-                    loading.invoke(Triple(spans[i].index, i, spans.size))
-                    val originalText = spans[i].text.toString()
+                val translatedTexts =
+                    translator.onlineTranslate(
+                        spans.map { it.text.toString() },
+                        currentSettings.from,
+                        currentSettings.to
+                    )
 
-                    val finalText = try {
-                        Tasks.await(translator.translate(originalText))
-                    } catch (t: ExecutionException) {
-                        throw t.cause ?: t
-                    }
+                spans.forEachIndexed { idx, span ->
+                    val hasImage = span.text.getSpans<AsyncDrawableSpan>().isNotEmpty()
+                    val finalText =
+                        if (hasImage) span.text
+                        else (translatedTexts.getOrNull(idx)?: return@forEachIndexed).toSpanned()
+
                     val start = builder.length
                     builder.append(finalText)
                     val end = builder.length
                     builder.append('\n')
-                    out.add(
-                        TextSpan(
-                            finalText.toSpanned(),
-                            start,
-                            end,
-                            spans[i].index,
-                            spans[i].innerIndex
-                        )
-                    )
+                    out.add(TextSpan(finalText, start, end, span.index, span.innerIndex))
                 }
             }
-            val mlRawText = builder.toString()
 
-            // atomically write the file by rename
+            // --- Offline mode ---
+            else {
+                val translator = mlTranslator ?: return text to spans
+                spans.forEachIndexed { i,  span ->
+                    loading.invoke(Triple(span.index, i, spans.size))
+                    val hasImage = span.text.getSpans<AsyncDrawableSpan>().isNotEmpty()
+                    val finalText =
+                        if(hasImage)
+                            span.text
+                        else
+                            try {
+                                Tasks.await(translator.translate(span.text.toString())).toSpanned()
+                            } catch (t: ExecutionException) {
+                                throw t.cause ?: t
+                            }
+
+                    val start = builder.length
+                    builder.append(finalText)
+                    val end = builder.length
+                    builder.append('\n')
+                    out.add(TextSpan(finalText, start, end, span.index, span.innerIndex))
+                }
+            }
+
+            //Save in cache
             safe {
-                context?.cacheDir?.let {
-                    val cache = File(it, "$filePrefix.tmp")
-                    cache.writeText(mlRawText)
-                    safe { File(it, "$filePrefix.txt").delete() } // just in case
-                    cache.renameTo(File(it, "$filePrefix.txt"))
+                context?.cacheDir?.let { dir ->
+                    val cache = File(dir, "$filePrefix.tmp")
+                    cache.writeText(builder.toString())
+                    val finalFile = File(dir, "$filePrefix.txt")
+                    finalFile.delete()
+                    cache.renameTo(finalFile)
                 }
             }
 
-            return mlRawText.toSpanned() to out
+            return builder to out
         } catch (t: Throwable) {
             throw MLException(t)
         }
@@ -1705,28 +1899,7 @@ class ReadActivityViewModel : ViewModel() {
         _chapterTile.postValue(chaptersTitlesInternal[realNewIndex])
     }*/
 
-    fun onScroll(visibility: ScrollVisibilityIndex?) {
-        if (visibility == null) return
 
-        // dynamically increase padding in case of very small chapters with a maximum of 10 chapters
-        val first = visibility.firstInMemory.index
-        val last = visibility.lastInMemory.index
-        chapterPaddingTop = minOf(10, maxOf(chapterPaddingTop, (last - first) + 1))
-
-        val current = currentIndex
-
-        val save = visibility.firstFullyVisible ?: visibility.firstInMemory
-        desiredTTSIndex = visibility.firstFullyVisibleUnderLine?.toScroll()
-        changeIndex(save.toScroll())
-
-        // update the read area if changed index
-        if (current != save.index)
-            updateReadArea()
-
-        // load forwards and backwards
-        updateIndex(visibility.firstInMemory.index)
-        updateIndex(visibility.lastInMemory.index)
-    }
 
     // FUCK ANDROID WITH ALL MY HEART
     // SEE https://stackoverflow.com/questions/45960265/android-o-oreo-8-and-higher-media-buttons-issue WHY
@@ -2009,47 +2182,5 @@ class ReadActivityViewModel : ViewModel() {
 
             return true
         }
-    }
-
-
-    //“I don’t know where to put this…
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    @JsonFormat(shape = JsonFormat.Shape.ARRAY)
-    data class GoogleTranslationResponse(
-        val sentences: List<GoogleSentence>,
-        val extra: Any? = null,
-        val language: String? = null
-    )
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    @JsonFormat(shape = JsonFormat.Shape.ARRAY)
-    data class GoogleSentence(
-        val trans: String,
-        val orig: String?,
-        val translit: String? = null,
-        val srcTranslit: String? = null
-    )
-
-    suspend fun onlineTranslate(text: String,from:String, to: String): String {
-        val baseUrl = "https://translate.googleapis.com/translate_a/single"
-        if (text.trim().isBlank()) return ""
-
-        var retryNumber = 0
-        val maxRetry = 5
-        while (retryNumber < maxRetry){
-            try{
-                // Google returns: [ [[trans, orig, ...], [trans, orig, ...]], ... ]
-                return MainActivity.app.get(
-                    "$baseUrl?client=gtx&sl=$from&tl=$to&dt=t&q=${Uri.encode(text)}"
-                ).parsed<GoogleTranslationResponse>().sentences.joinToString("") { (trans, _) -> trans }
-            }
-            catch (t: Throwable){
-                retryNumber++
-                if(retryNumber >= maxRetry)
-                    throw t
-                delay( 500L * (2.0.pow(retryNumber).toLong()))
-            }
-        }
-        return ""
     }
 }

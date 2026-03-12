@@ -1,6 +1,5 @@
 package com.lagradost.quicknovel.ui.download
 
-import android.R.attr.fragment
 import android.annotation.SuppressLint
 import android.content.res.Configuration
 import android.os.Bundle
@@ -8,16 +7,10 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
-import androidx.activity.result.launch
 import androidx.appcompat.widget.SearchView
-import androidx.core.view.doOnAttach
-import androidx.core.view.isGone
-import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.fasterxml.jackson.annotation.JsonProperty
@@ -42,13 +35,9 @@ import com.lagradost.quicknovel.mvvm.observe
 import com.lagradost.quicknovel.ui.SortingMethodAdapter
 import com.lagradost.quicknovel.ui.UiImage
 import com.lagradost.quicknovel.ui.img
-import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class DownloadFragment : Fragment() {
     private lateinit var viewModel: DownloadViewModel

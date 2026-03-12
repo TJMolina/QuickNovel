@@ -1037,8 +1037,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             }
 
 
-            addOnScrollListener(object :
-                RecyclerView.OnScrollListener() {
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 var updateFromCode = false
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     if (dy != 0 && !updateFromCode) {
@@ -1084,13 +1083,20 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                         updateFromCode = false
                     }
 
-                    onScroll()
                     super.onScrolled(recyclerView, dx, dy)
 
                     // binding.tmpTtsEnd.fixLine((getBottomY()- remainingBottom) + 7.toPx)
                     // binding.tmpTtsStart.fixLine(remainingTop + 7.toPx)
                 }
+
+                override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                    super.onScrollStateChanged(recyclerView, newState)
+                    if(newState == RecyclerView.SCROLL_STATE_SETTLING || newState == RecyclerView.SCROLL_STATE_IDLE){
+                        onScroll()
+                    }
+                }
             })
+
         }
 
         //here inserted novel chapter text into recyclerview

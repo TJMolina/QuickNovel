@@ -154,10 +154,10 @@ class NovelFireProvider:  MainAPI() {
                 }
                 else if(span.text().contains("Views")){
                     this.views = span.selectFirst("strong")?.ownText()?.trim()?.let {
-                        if(it.contains("k",true)) it.replace("k","", true).toFloatOrNull()?.times(1000)?.roundToInt()
-                        else if(it.contains("m",true)) it.replace("m","", true).toFloatOrNull()?.times(1000000)?.roundToInt()
-                        else it.toIntOrNull()
-                    }
+                                if(it.contains("k",true)) it.replace("k","", true).toFloatOrNull()?.times(1000)?.roundToInt()
+                                else if(it.contains("m",true)) it.replace("m","", true).toFloatOrNull()?.times(1000000)?.roundToInt()
+                                else it.toIntOrNull()
+                            }
                 }
             }
 

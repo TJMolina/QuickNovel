@@ -719,14 +719,14 @@ class ReadActivityViewModel : ViewModel() {
         private set
 
 
-    private var initPaddingTop = 0
-    private var initPaddingBottom = 1
 
 
     /** lower padding for preloading current-chapterPaddingBottom*/
+    private var initPaddingBottom = 1//these are to reduce loadings times
     private var chapterPaddingBottom: Int = 1
 
     /** upper padding, for preloading current+chapterPaddingTop */
+    private var initPaddingTop = 1
     private var chapterPaddingTop: Int = 2
 
     fun reloadChapter(index: Int) = ioSafe {

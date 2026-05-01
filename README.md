@@ -1,7 +1,4 @@
 # QuickNovel
-
-**English** | [Русский](README_RU.md)
-
 Adfree FOSS Android app for downloading novels. It also functions as an Epub reader.
 
 **Discord:** https://discord.gg/5Hus6fM
@@ -25,7 +22,6 @@ Adfree FOSS Android app for downloading novels. It also functions as an Epub rea
 - https://libread.com
 - https://lightnovelstranslations.com
 - https://lightnovelworld.org
-- https://lnmtl.com
 - https://meionovels.com
 - https://mtlnovel.me
 - https://www.nobadnovel.com
@@ -46,6 +42,7 @@ Adfree FOSS Android app for downloading novels. It also functions as an Epub rea
 - https://www.scribblehub.com
 - https://www.skynovels.net
 - https://www.sonicmtl.com
+- https://vynovel.com
 - https://wtr-lab.com
 - https://wuxia.click
 - https://www.wuxiabox.com

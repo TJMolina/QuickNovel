@@ -123,7 +123,6 @@
     <string name="has_read">Has read</string>
 
     <string name="read_display_settings">Settings</string>
-    <string name="tab_translation">Translate</string>
     <string name="read_text_size">Text</string>
     <string name="bigger_font">Bigger Font</string>
     <string name="smaller_font">Smaller Font</string>
@@ -252,9 +251,7 @@
     <string name="sleep_format_stop">TTS will stop in %d min</string>
     <string name="google_translate">Google translate</string>
     <string name="online_translate">Online translation</string>
-    <string name="translate_from">Translate from language</string>
-    <string name="translate_to">Translate to language</string>
-    <string name="toWhatLanguague">-></string>
+    <string name="toWhatLanguague">to</string>
     <string name="start_chapter">Skipped chapters</string>
     <string name="tts_speed">TTS Speed</string>
     <string name="tts_pitch">TTS Pitch</string>

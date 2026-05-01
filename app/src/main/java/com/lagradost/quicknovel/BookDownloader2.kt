@@ -567,7 +567,7 @@ object BookDownloader2Helper {
 
         val externalReader = settingsManager.getBoolean(
             activity.getString(R.string.external_reader_key),
-            true
+            false
         )
         if (openInApp ?: !externalReader) {
             val myIntent = Intent(activity, ReadActivity2::class.java)
@@ -605,7 +605,7 @@ object BookDownloader2Helper {
 
         val externalReader = settingsManager.getBoolean(
             getString(R.string.external_reader_key),
-            true
+            false
         )
         val authorsNotes = getKey<Boolean>(EPUB_AUTHOR_NOTES) ?: true
 

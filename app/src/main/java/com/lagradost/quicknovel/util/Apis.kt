@@ -16,6 +16,7 @@ import com.lagradost.quicknovel.providers.ChrysanthemumGardenProvider
 import com.lagradost.quicknovel.providers.FanMtlnProvider
 import com.lagradost.quicknovel.providers.FenrirRealProvider
 import com.lagradost.quicknovel.providers.FreewebnovelProvider
+import com.lagradost.quicknovel.providers.FuckNovelPiaProvider
 import com.lagradost.quicknovel.providers.GraycityProvider
 import com.lagradost.quicknovel.providers.HiraethTranslationProvider
 import com.lagradost.quicknovel.providers.IndoWebNovelProvider
@@ -24,7 +25,6 @@ import com.lagradost.quicknovel.providers.KolNovelProvider
 import com.lagradost.quicknovel.providers.LibReadProvider
 import com.lagradost.quicknovel.providers.LightNovelTranslationsProvider
 import com.lagradost.quicknovel.providers.LightNovelWorldProvider
-import com.lagradost.quicknovel.providers.LnMTLProvider
 import com.lagradost.quicknovel.providers.MeioNovelProvider
 import com.lagradost.quicknovel.providers.MoreNovelProvider
 import com.lagradost.quicknovel.providers.MtlNovelProvider
@@ -53,7 +53,7 @@ import com.lagradost.quicknovel.providers.SakuraNovelProvider
 import com.lagradost.quicknovel.providers.ScribblehubProvider
 import com.lagradost.quicknovel.providers.SkyNovelsProvider
 import com.lagradost.quicknovel.providers.SonicMTLProvider
-import com.lagradost.quicknovel.providers.WattpadProvider
+import com.lagradost.quicknovel.providers.VynovelProvider
 import com.lagradost.quicknovel.providers.WtrLabProvider
 import com.lagradost.quicknovel.providers.WuxiaBoxProvider
 import com.lagradost.quicknovel.providers.WuxiaClickProvider
@@ -67,62 +67,63 @@ class Apis {
             AnnasArchive(),
             //AzynovelProvider(), // dont exist anymore
             //BestLightNovelProvider(), //dont exist anymore
-            ChrysanthemumGardenProvider(),
             //ComrademaoProvider(), // domain sold/down?
-            DevilNovelsProvider(),
             //EfremnetProvider(), // domain is expired
             //EngNovelProvider(),
-            FanMtlnProvider(),
-            FenrirRealProvider(),
+            DevilNovelsProvider(),
             FreewebnovelProvider(),
+            FenrirRealProvider(),
+            FanMtlnProvider(),
+            FuckNovelPiaProvider(),
             GraycityProvider(),
             HiraethTranslationProvider(),
             IndoWebNovelProvider(),
+            LnoriProvider(),
             KolNovelProvider(),
             LibReadProvider(),
             //LightNovelPubProvider(), // Got cloudflare, but probably bypassable
             LightNovelTranslationsProvider(),
-            LightNovelWorldProvider(),
-            LnoriProvider(),
-            LnMTLProvider(),
             MeioNovelProvider(),
             //MNovelFreeProvider(), // same as NovelFullVipProvider
             MoreNovelProvider(),
             MtlNovelProvider(),
-            NoBadNovelProvider(),
-            NovelasLigerasProvider(),
             NovelBinProvider(),
-            NovelBuddyProvider(),
-            NovelFireProvider(),
             NovelFullNETProvider(),
             NovelFullProvider(),
-            NovelLightProvider(),
             NovelManiaProvider(),
+            NovelLightProvider(),
+            NovelFireProvider(),
+            NovelasLigerasProvider(),
             //NovelPassionProvider(), // Site gone
             NovelsOnlineProvider(),
             NovLoveProvider(),
             PawReadProver(),
-            PlanetaEpubProvider(),
             RanobesProvider(),
+            PlanetaEpubProvider(),
             //RanobesProvider(),
             //ReadAnyBookProvider(), // Books locked behind login
             ReadfromnetProvider(),
-            ReadhiveProvider(),
             //ReadLightNovelProvider(), // NOT WORKING?
             ReadNovelFullProvider(),
-            ReadOnlineFreeBookProvider(),
             RewayatProvider(),
             RoyalRoadProvider(),
+            ReadOnlineFreeBookProvider(),
+            ReadhiveProvider(),
             SakuraNovelProvider(), // cloudflare?
             ScribblehubProvider(),
-            SkyNovelsProvider(),
-            SonicMTLProvider(),
-            WattpadProvider(),
+            VynovelProvider(),
+            //WuxiaWorldOnlineProvider(), // Site does not work
+            //WuxiaWorldSiteProvider(),
+            //WattpadProvider(), // they have randomized the css classes
             WtrLabProvider(),
             WuxiaBoxProvider(),
             WuxiaClickProvider(),
-            //WuxiaWorldOnlineProvider(), // Site does not work
-            //WuxiaWorldSiteProvider(),
+            ChrysanthemumGardenProvider(),
+            LightNovelWorldProvider(),
+            NoBadNovelProvider(),
+            SkyNovelsProvider(),
+            SonicMTLProvider(),
+            NovelBuddyProvider()
         ).sortedBy { it.name }
 
         fun getApiFromName(name: String): APIRepository {

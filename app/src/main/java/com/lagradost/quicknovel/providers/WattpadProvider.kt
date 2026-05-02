@@ -1,13 +1,9 @@
 package com.lagradost.quicknovel.providers
 
-import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.quicknovel.*
-import com.lagradost.quicknovel.util.AppUtils.parseJson
-import com.lagradost.quicknovel.util.AppUtils.toJson
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
-import kotlin.collections.mapNotNull
 
 class WattpadProvider : MainAPI() {
     override val mainUrl = "https://www.wattpad.com"
@@ -15,7 +11,6 @@ class WattpadProvider : MainAPI() {
     override val hasMainPage = true
     override val iconId = R.drawable.icon_wattpad
     override val iconBackgroundId = R.color.wattpadColor
-    override val rateLimitTime = 500L
 
 
     private val langHeaders = mapOf(
@@ -80,8 +75,8 @@ class WattpadProvider : MainAPI() {
 
         val document = app.get(nextUrl).parsed<Root>()
 
-        val results = document.stories?.mapNotNull {
-            newSearchResponse(it.title ?: return@mapNotNull null, it.url ?: return@mapNotNull null) {
+        val results = document.stories?.map {
+            newSearchResponse(it.title, it.url) {
                 posterUrl = it.cover
             }
         } ?: emptyList()
@@ -120,117 +115,72 @@ class WattpadProvider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse {
         val response = app.get(url)
-        val script_text = Regex("<script>.*?window._+remix.*?</script>").find(response.text)!!.value
-        //idk how to parse "routes\/story.$storyid"
-        val state = JSONObject(Regex("\\{.*\\}").find(script_text)!!.value)
-            .getJSONObject("state")
-            .getJSONObject("loaderData")
-        val route = state.getString(state.names()!!.getString(state.length() - 1))
-
-        val novel = parseJson<LoadPageResponse>(route)
-        val story = novel.story
-        val ch =  story.parts?.map{ chap ->
-            val href = chap.url
-            val name = chap.title
-            val date = chap.formattedCreateDate
-            newChapterData(
-                name = name,
-                url = href
-            ) { dateOfRelease = date }
+        val script_regex = Regex("<script>.*?window._+remix.*?<\\/script>")
+        val script_text = script_regex.find(response.text)!!.value
+        val json_text = Regex("\\{.*\\}").find(script_text)!!.value
+        val wattpad_data = JSONObject(json_text)
+        val state = wattpad_data.getJSONObject("state").getJSONObject("loaderData")
+        val route = state.getJSONObject(state.names()!!.getString(state.length() - 1))
+        val story = route.getJSONObject("story")
+        val title = story.getString("title");
+        val parts = story.getJSONArray("parts")
+        val toc = mutableListOf<ChapterData>()
+        for (i in 0 until parts.length()) {
+            val chap = parts.getJSONObject(i)
+            val href = chap.getString("url")
+            val name = chap.getString("title")
+            val date = chap.getString("formattedCreateDate")
+            toc.add(
+                newChapterData(
+                    name = name,
+                    url = href
+                ) { dateOfRelease = date })
         }
-
-        return newStreamResponse(name = novel.title, url = url, data = ch ?: emptyList()) {
-            author = story.author?.username
-            posterUrl = story.cover
-            peopleVoted = story.voteCount
-            views = story.voteCount
-            synopsis = story.description
-            tags = story.tags?.mapNotNull {
-                it.trim().takeIf { text ->  text.isNotEmpty() }
-            }
+        val writer = story.getJSONObject("author").getString("username")
+        val cover = story.getString("cover")
+        val votes = story.getInt("voteCount")
+        val viewCount = story.getInt("readCount")
+        val desc = story.getString("description")
+        val labels = mutableListOf<String>()
+        val tag_array = story.getJSONArray("tags")
+        for (i in 0 until tag_array.length()) {
+            labels.add(tag_array.getString(i))
+        }
+        return newStreamResponse(name = title, url = url, data = toc) {
+            author = writer
+            posterUrl = cover
+            peopleVoted = votes
+            views = viewCount
+            synopsis = desc
+            tags = labels
         }
     }
 
     override suspend fun loadHtml(url: String): String {
         val resp = app.get(url)
-
-        val scriptRegex = Regex("window\\.prefetched\\s*=\\s*(\\{.*\\})")
-        val scriptText = scriptRegex.find(resp.text)?.groupValues?.get(1)
-            ?: throw Exception("Failed to get Data")
-
-        val parsed = parseJson<Map<String, ChapterWrapper>>(scriptText)
-
-        val data = parsed.values.first().data
-
-        val totalPages = data.pages
-        val textUrlBase = data.textUrl.text
-
-        val fullHtml = StringBuilder()
-
-        for (page in 1..totalPages) {
-            val pageResp = app.get("$textUrlBase$page").text
-            fullHtml.append(pageResp)
-        }
-        return fullHtml.toString()
+        val script_regex = Regex("window\\.prefetched\\s*?=\\s*?\\{.*\\}")
+        val script_text = script_regex.find(resp.text)!!.value
+        val json_text = Regex("\\{.*\\}").find(script_text)!!.value
+        val part_data = JSONObject(json_text)
+        val key = part_data.names()!!.getString(0)
+        val data = part_data.getJSONObject(key).getJSONObject("data")
+        val unescaped =
+            Parser.unescapeEntities(data.getString("storyText"), true)
+        return Jsoup.parse(unescaped)
+            .html()
     }
 
     // ================== DATA CLASSES ==================
-    data class LoadPageResponse(
-        val story: Story,
-        val title: String
-    )
-    data class Part(
-        val url:String,
-        val title: String,
-        val formattedCreateDate: String
-    )
-    data class Author(
-        val username: String
-    )
 
     data class Root(
-        @JsonProperty("stories")
         val stories: List<Story>?,
-        @JsonProperty("total")
         val total: Int,
-        @JsonProperty("nextUrl")
         val nextUrl: String?,
     )
 
     data class Story(
-        @JsonProperty("cover")
         val cover: String?,
-        @JsonProperty("title")
-        val title: String?,
-        @JsonProperty("url")
-        val url: String?,
-
-        val author: Author?,
-        val voteCount: Int?,
-        val description: String?,
-        val tags: List<String>?,
-        val parts: List<Part>?
-    )
-
-
-    data class ChapterWrapper(
-        @JsonProperty("data")
-        val data: WChapterData
-    )
-
-    data class WChapterData(
-        @JsonProperty("pages")
-        val pages: Int,
-
-        @JsonProperty("text_url")
-        val textUrl: TextUrl,
-
-        @JsonProperty("storyText")
-        val storyText: String? = null
-    )
-
-    data class TextUrl(
-        @JsonProperty("text")
-        val text: String
+        val title: String,
+        val url: String
     )
 }

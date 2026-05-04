@@ -124,10 +124,6 @@ class Apis {
             WtrLabProvider(),
             WuxiaBoxProvider(),
             WuxiaClickProvider(),
-            ChrysanthemumGardenProvider(),
-            LightNovelWorldProvider(),
-            NoBadNovelProvider(),
-            NovelBuddyProvider()
         ).sortedBy { it.name }
 
         fun getApiFromName(name: String): APIRepository {

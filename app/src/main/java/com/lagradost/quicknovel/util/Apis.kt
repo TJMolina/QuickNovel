@@ -68,50 +68,55 @@ class Apis {
             AnnasArchive(),
             //AzynovelProvider(), // dont exist anymore
             //BestLightNovelProvider(), //dont exist anymore
+            ChrysanthemumGardenProvider(),
             //ComrademaoProvider(), // domain sold/down?
+            DevilNovelsProvider(),
             //EfremnetProvider(), // domain is expired
             //EngNovelProvider(),
-            DevilNovelsProvider(),
-            FreewebnovelProvider(),
-            FenrirRealProvider(),
             FanMtlnProvider(),
+            FenrirRealProvider(),
             FuckNovelPiaProvider(),
+            FreewebnovelProvider(),
             GraycityProvider(),
             HiraethTranslationProvider(),
             IndoWebNovelProvider(),
-            LnoriProvider(),
             KolNovelProvider(),
             LibReadProvider(),
             //LightNovelPubProvider(), // Got cloudflare, but probably bypassable
             LightNovelTranslationsProvider(),
+            LightNovelWorldProvider(),
+            LnoriProvider(),
             MeioNovelProvider(),
             //MNovelFreeProvider(), // same as NovelFullVipProvider
             MoreNovelProvider(),
             MtlNovelProvider(),
+            NoBadNovelProvider(),
+            NovelasLigerasProvider(),
             NovelBinProvider(),
+            NovelBuddyProvider(),
+            NovelFireProvider(),
             NovelFullNETProvider(),
             NovelFullProvider(),
-            NovelManiaProvider(),
             NovelLightProvider(),
-            NovelFireProvider(),
-            NovelasLigerasProvider(),
+            NovelManiaProvider(),
             //NovelPassionProvider(), // Site gone
             NovelsOnlineProvider(),
             NovLoveProvider(),
             PawReadProver(),
-            RanobesProvider(),
             PlanetaEpubProvider(),
-            //RanobesProvider(),
+            RanobesProvider(),
             //ReadAnyBookProvider(), // Books locked behind login
             ReadfromnetProvider(),
+            ReadhiveProvider(),
             //ReadLightNovelProvider(), // NOT WORKING?
             ReadNovelFullProvider(),
+            ReadOnlineFreeBookProvider(),
             RewayatProvider(),
             RoyalRoadProvider(),
-            ReadOnlineFreeBookProvider(),
-            ReadhiveProvider(),
             SakuraNovelProvider(), // cloudflare?
             ScribblehubProvider(),
+            SkyNovelsProvider(),
+            SonicMTLProvider(),
             VynovelProvider(),
             //WuxiaWorldOnlineProvider(), // Site does not work
             //WuxiaWorldSiteProvider(),
@@ -122,8 +127,6 @@ class Apis {
             ChrysanthemumGardenProvider(),
             LightNovelWorldProvider(),
             NoBadNovelProvider(),
-            SkyNovelsProvider(),
-            SonicMTLProvider(),
             NovelBuddyProvider()
         ).sortedBy { it.name }
 

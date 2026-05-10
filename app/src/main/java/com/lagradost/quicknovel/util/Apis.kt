@@ -25,6 +25,7 @@ import com.lagradost.quicknovel.providers.KolNovelProvider
 import com.lagradost.quicknovel.providers.LibReadProvider
 import com.lagradost.quicknovel.providers.LightNovelTranslationsProvider
 import com.lagradost.quicknovel.providers.LightNovelWorldProvider
+import com.lagradost.quicknovel.providers.LnMTLProvider
 import com.lagradost.quicknovel.providers.MeioNovelProvider
 import com.lagradost.quicknovel.providers.MoreNovelProvider
 import com.lagradost.quicknovel.providers.MtlNovelProvider
@@ -86,6 +87,7 @@ class Apis {
             LightNovelTranslationsProvider(),
             LightNovelWorldProvider(),
             LnoriProvider(),
+            LnMTLProvider(),
             MeioNovelProvider(),
             //MNovelFreeProvider(), // same as NovelFullVipProvider
             MoreNovelProvider(),
@@ -105,6 +107,7 @@ class Apis {
             PawReadProver(),
             PlanetaEpubProvider(),
             RanobesProvider(),
+            //RanobesProvider(),
             //ReadAnyBookProvider(), // Books locked behind login
             ReadfromnetProvider(),
             ReadhiveProvider(),
@@ -118,12 +121,12 @@ class Apis {
             SkyNovelsProvider(),
             SonicMTLProvider(),
             VynovelProvider(),
-            //WuxiaWorldOnlineProvider(), // Site does not work
-            //WuxiaWorldSiteProvider(),
             WattpadProvider(),
             WtrLabProvider(),
             WuxiaBoxProvider(),
             WuxiaClickProvider(),
+            //WuxiaWorldOnlineProvider(), // Site does not work
+            //WuxiaWorldSiteProvider(),
         ).sortedBy { it.name }
 
         fun getApiFromName(name: String): APIRepository {

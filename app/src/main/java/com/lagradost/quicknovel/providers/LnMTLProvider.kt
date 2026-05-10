@@ -12,8 +12,6 @@ import com.lagradost.quicknovel.newChapterData
 import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.util.AppUtils.parseJson
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.jsoup.nodes.Document
 
 class LnMTLProvider : MainAPI() {
@@ -24,22 +22,20 @@ class LnMTLProvider : MainAPI() {
     override val iconId = R.drawable.icon_lnmtl
     override val iconBackgroundId = R.color.white
     private var allNovels: Array<NovelInfo> = emptyArray()
-    private val mutex: Mutex = Mutex()
-    private suspend fun prefetchAllNovels() {
-        if (allNovels.isNotEmpty()) return
-        mutex.withLock {
-            if (allNovels.isEmpty()) {
-                val home = app.get(mainUrl).text
-                val path = Regex("prefetch: '/(.*?\\.json)'")
-                    .find(home)
-                    ?.groupValues
-                    ?.get(1)
-                if (path != null) {
-                    allNovels = app.get("$mainUrl/$path")
-                        .parsed<Array<NovelInfo>>()
-                        .apply { shuffle() }
-                }
-            }
+
+    private suspend fun prefetchAllNovels(){
+        if(allNovels.isEmpty()){
+            val home = app.get(mainUrl).text
+
+            val path = Regex("prefetch: '/(.*?\\.json)'")
+                .find(home)
+                ?.groupValues
+                ?.get(1)
+
+            allNovels =
+                app.get("$mainUrl/$path")
+                    .parsed<Array<NovelInfo>>()
+                    .apply { shuffle() }
         }
     }
 
@@ -54,7 +50,7 @@ class LnMTLProvider : MainAPI() {
 
         val returnValue = allNovels.map {
                 newSearchResponse(it.name, it.url) {
-                    posterUrl = it.image.replace("40.","200.")
+                    posterUrl = it.image
                 }
             }
         return HeadMainPageResponse(mainUrl, returnValue)
@@ -62,63 +58,80 @@ class LnMTLProvider : MainAPI() {
 
 
     suspend fun getChapters(document: Document): List<ChapterData>? {
-        //All data, vols and first chapters
+
         val scriptContent = document.select("script")
             .firstOrNull { it.html().contains("lnmtl.volumes") }
             ?.html()
             ?: return null
 
-        //all vols id
         val volumesRaw = scriptContent
             .substringAfter("lnmtl.volumes = ")
             .substringBefore(";lnmtl.route")
-        val volumesArray = parseJson<List<Vol>>(volumesRaw).sortedBy { it.number }
-        if (volumesArray.isEmpty()) return null
 
-        //first vol
+        val volumesArray = parseJson<List<Vol>>(volumesRaw)
+
         val firstResponseRaw = scriptContent
             .substringAfter("lnmtl.firstResponse = ")
             .substringBefore(";lnmtl.volumes")
-        val firstResponse = parseJson<VolChapterResponse>(firstResponseRaw)
 
-        val allChapters = mutableListOf<ChapterData>()
+        val firstResponse =
+            parseJson<VolChapterResponse>(firstResponseRaw)
 
-        for ((index, vol) in volumesArray.withIndex()) {
-            //get all vols info. only first page
-            val response = if (index == 0) {
-                firstResponse
-            } else {
-                val volUrl = "$mainUrl/chapter?page=1&volumeId=${vol.id}"
-                app.get(volUrl).parsed<VolChapterResponse>()
-            }
+        val firstChapter =
+            firstResponse.data.firstOrNull()
+                ?: return null
 
-            val chaptersInVol = response.data
-            if (chaptersInVol.isNotEmpty()){
-                val firstChapter = chaptersInVol.first()
-                val totalChaptersInVol = response.total
+        val firstChapterNumber =
+            firstChapter.slug
+                .substringAfterLast("-")
+                .toIntOrNull()
+                ?: return null
 
-                val slugBase = firstChapter.slug.substringBeforeLast("-") + "-"
-                firstChapter.slug.substringAfterLast("-").toIntOrNull() ?.let{ firstNum ->
-                    for (i in 0 until totalChaptersInVol) {
-                        val currentNum = firstNum + i
-                        val chapterTitle = "Vol ${vol.number} Ch $currentNum"
 
-                        val actualChapter = chaptersInVol.getOrNull(i)
+        if (volumesArray.isEmpty()) return null
 
-                        allChapters.add(
-                            newChapterData(
-                                actualChapter?.title ?: chapterTitle,
-                                "$mainUrl/chapter/$slugBase$currentNum"
-                            )
-                        )
-                    }
-                }
+        val lastVolume = volumesArray.maxByOrNull { it.number } ?: return null
+        val lastVolumeId = lastVolume.id
 
-            }
+        var volUrl = "$mainUrl/chapter?volumeId=$lastVolumeId"
 
+        var volResponse = app.get(volUrl)
+            .parsed<VolChapterResponse>()
+
+        val lastPage = volResponse.lastPage
+
+        if (lastPage > 1) {
+            volUrl =
+                "$mainUrl/chapter?page=$lastPage&volumeId=$lastVolumeId"
+
+            volResponse = app.get(volUrl)
+                .parsed()
         }
 
-        return if (allChapters.isEmpty()) null else allChapters
+        val lastChapter =
+            volResponse.data.lastOrNull()
+                ?: return null
+
+        val lastChapterNumber =
+            lastChapter.slug
+                .substringAfterLast("-")
+                .toIntOrNull()
+                ?: return null
+
+        val slug =
+            lastChapter.slug
+                .substringBeforeLast("-chapter-")
+
+        return (firstChapterNumber..lastChapterNumber).map { chapterNumber ->
+
+            val chapterUrl =
+                "$mainUrl/chapter/${slug}-chapter-$chapterNumber"
+
+            newChapterData(
+                "Chapter $chapterNumber",
+                chapterUrl
+            )
+        }
     }
 
 
@@ -167,7 +180,7 @@ class LnMTLProvider : MainAPI() {
             }
             .map {
                 newSearchResponse(it.name, it.url) {
-                    posterUrl = it.image.replace(  "40.","200.")
+                    posterUrl = it.image
                 }
             }
     }
@@ -176,9 +189,7 @@ class LnMTLProvider : MainAPI() {
         @JsonProperty("last_page")
         val lastPage: Int,
         @JsonProperty("data")
-        val data: List<LNMTLChapterData>,
-        @JsonProperty("total")
-        val total:Int,
+        val data: List<LNMTLChapterData>
     )
 
     data class LNMTLChapterData(

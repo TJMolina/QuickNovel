@@ -79,7 +79,6 @@ import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 import kotlin.properties.Delegates
 import com.google.android.material.tabs.TabLayout
-import com.lagradost.quicknovel.ReadActivityViewModel.MLSettings.Companion.AUTO_LANG
 
 class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     companion object {
@@ -1319,14 +1318,14 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 if (view == null) return@setOnClickListener
                 val context = view.context
 
-                val items = ReadActivityViewModel.MLSettings.mapList
+                val items = ReadActivityViewModel.MLSettings.list
 
                 context.showDialog(
                     items.map {
                         it.second
                     },
                     items.map { it.first }.indexOf(viewModel.mlToLanguage),
-                    context.getString(R.string.translate_to), false, {}
+                    context.getString(R.string.sleep_timer), false, {}
                 ) { index ->
                     viewModel.mlToLanguage = items[index].first
                     binding.readMlTo.text =
@@ -1334,37 +1333,28 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 }
             }
 
-            binding.readOnlineTranslationSwitch.isChecked = viewModel.mlUseOnlineTransaltion
-            binding.readOnlineTranslationSwitch.setOnCheckedChangeListener { _, isChecked ->
-                viewModel.mlUseOnlineTransaltion = isChecked
-                //Do not allow automatic detection of the target language; the user should know that themselves (they should know the name of their own language).
-                //It could probably be automated, but I have no idea.
-                if (isChecked == false && viewModel.mlFromLanguage == AUTO_LANG) {
-                    viewModel.mlFromLanguage = "en"
-                    binding.readMlFrom.text = ReadActivityViewModel.MLSettings.fromShortToDisplay("en")
-                }
-            }
-
             binding.readMlFrom.setOnClickListener { view ->
                 if (view == null) return@setOnClickListener
                 val context = view.context
 
-                val items = (
-                    if (!viewModel.mlUseOnlineTransaltion) ReadActivityViewModel.MLSettings.mapList
-                    else ReadActivityViewModel.MLSettings.mapOnlineList
-                )
+                val items = ReadActivityViewModel.MLSettings.list
 
                 context.showDialog(
-                    items.map { item ->
-                        item.second
+                    items.map {
+                        it.second
                     },
-                    items.map { item -> item.first }.indexOf(viewModel.mlFromLanguage),
-                    context.getString(R.string.translate_from), false, {}
+                    items.map { it.first }.indexOf(viewModel.mlFromLanguage),
+                    context.getString(R.string.sleep_timer), false, {}
                 ) { index ->
                     viewModel.mlFromLanguage = items[index].first
                     binding.readMlFrom.text =
                         ReadActivityViewModel.MLSettings.fromShortToDisplay(viewModel.mlFromLanguage)
                 }
+            }
+
+            binding.readOnlineTranslationSwitch.isChecked = viewModel.mlUseOnlineTransaltion
+            binding.readOnlineTranslationSwitch.setOnCheckedChangeListener { _, isChecked ->
+                viewModel.mlUseOnlineTransaltion = isChecked
             }
 
             binding.readApplyTranslation.setOnClickListener { view ->

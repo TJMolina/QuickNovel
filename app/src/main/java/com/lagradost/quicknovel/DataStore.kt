@@ -61,7 +61,7 @@ const val EPUB_CURRENT_POSITION_CHAPTER: String = "reader_epub_position_chapter"
 //all novel data like name, url, etc.
 const val RESULT_BOOKMARK: String = "result_bookmarked"
 
-//novel bookmark like complete, ongoing, etc
+//all novels's id saved in libraries
 const val RESULT_BOOKMARK_STATE: String = "result_bookmarked_state"
 const val HISTORY_FOLDER: String = "result_history"
 const val CURRENT_TAB : String = "current_tab"

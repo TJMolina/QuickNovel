@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.os.Parcelable
 import android.view.LayoutInflater
 import android.view.ViewGroup
-import androidx.core.view.doOnAttach
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.lagradost.quicknovel.databinding.ViewpagerPageBinding
@@ -123,43 +122,25 @@ class ViewpagerAdapter(
 
         binding.pageRecyclerview.tag = position
         binding.pageRecyclerview.apply {
-            val compactView = binding.root.context.getDownloadIsCompact()
+            val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+            val compactView = context.getDownloadIsCompact()
+            spanCount = if (isLandscape) (if (compactView) 2 else 6) else (if (compactView) 1 else 3)
 
-            val spanCountLandscape = if (compactView) 2 else 6
-            val spanCountPortrait = if (compactView) 1 else 3
-            val orientation = resources.configuration.orientation
-
-            spanCount = if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                spanCountLandscape
-            } else {
-                spanCountPortrait
-            }
 
             if (adapter == null) { //  || rebind
                 // Only add the items after it has been attached since the items rely on ItemWidth
                 // Which is only determined after the recyclerview is attached.
                 // If this fails then item height becomes 0 when there is only one item
-                doOnAttach {
-                    setRecycledViewPool(AnyAdapter.sharedPool)
-                    adapter = AnyAdapter(
-                        this,
-                        downloadViewModel
-                    ).apply {
-                        footers = if(position == 0) 1 else 0
-                        collectionsOfRecyclerView[position] = WeakReference(binding.pageRecyclerview)
-                        setHasStableIds(true)
-                        submitList(item.items)
-                    }
+                val anyAdapter = AnyAdapter(this, downloadViewModel)
+                anyAdapter.headers = if(position == 0) 1 else 0
+                setRecycledViewPool(AnyAdapter.sharedPool)
+                post {
+                    adapter = anyAdapter
+                    collectionsOfRecyclerView[position] = WeakReference(this)
+                    anyAdapter.submitList(item.items)
                 }
             } else {
-                if(!collectionsOfRecyclerView.containsKey(position)){
-                    collectionsOfRecyclerView[position] = WeakReference(binding.pageRecyclerview)
-                }
-                (adapter as? AnyAdapter)?.apply {
-                    footers = if(position == 0) 1 else 0
-                    submitList(item.items)
-                }
-                // scrollToPosition(0)
+                (adapter as? AnyAdapter)?.submitList(item.items)
             }
             clearOnScrollListeners()
             addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {

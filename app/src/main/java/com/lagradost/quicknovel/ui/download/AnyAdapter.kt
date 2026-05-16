@@ -39,7 +39,7 @@ class AnyAdapter(
             if (a is ResultCached && b is ResultCached) {
                 a.source == b.source
             } else if (a is DownloadFragment.DownloadDataLoaded && b is DownloadFragment.DownloadDataLoaded) {
-                a.id == b.id//if you use .source, when you delete a novel, this crashes
+                a.id == b.id
             } else {
                 false
             }
@@ -69,7 +69,7 @@ class AnyAdapter(
     }
 
 
-    override fun onCreateFooter(parent: ViewGroup): ViewHolderState<Any> {
+    override fun onCreateHeader(parent: ViewGroup): ViewHolderState<Any> {
         val compact = parent.context.getDownloadIsCompact()
 
         return ViewHolderState(
@@ -105,7 +105,7 @@ class AnyAdapter(
         }
     }
 
-    override fun onBindFooter(holder: ViewHolderState<Any>) {
+    override fun onBindHeader(holder: ViewHolderState<Any>) {
         when (val binding = holder.view) {
             is DownloadImportBinding -> {
                 binding.backgroundCard.setOnClickListener {

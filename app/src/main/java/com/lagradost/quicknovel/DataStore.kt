@@ -9,6 +9,7 @@ import com.fasterxml.jackson.module.kotlin.KotlinFeature
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.lagradost.quicknovel.mvvm.logError
 import androidx.core.content.edit
+import com.lagradost.quicknovel.util.AppUtils.parseJson
 
 const val PREFERENCES_NAME: String = "rebuild_preference"
 const val DOWNLOAD_FOLDER: String = "downloads_data"
@@ -61,7 +62,7 @@ const val EPUB_CURRENT_POSITION_CHAPTER: String = "reader_epub_position_chapter"
 //all novel data like name, url, etc.
 const val RESULT_BOOKMARK: String = "result_bookmarked"
 
-//all novels's id saved in libraries
+//novel bookmark like complete, ongoing, etc
 const val RESULT_BOOKMARK_STATE: String = "result_bookmarked_state"
 const val HISTORY_FOLDER: String = "result_history"
 const val CURRENT_TAB : String = "current_tab"
@@ -236,11 +237,11 @@ data class DefaultLibrary(
 )
 
 val DEFAULT_LIBRARIES: List<DefaultLibrary> = listOf(
-    DefaultLibrary(1, "READING",       "Reading",    position = 1),
-    DefaultLibrary(2, "PLAN_TO_READ",  "Plan to read",  editable = false, position = 2),
-    DefaultLibrary(3, "ON_HOLD",       "On hold",    position = 3),
-    DefaultLibrary(4, "COMPLETED",     "Completed",  position = 4),
-    DefaultLibrary(5, "DROPPED",       "Dropped",    position = 5),
+    DefaultLibrary(1, "READING",       R.string.type_reading.toString(),      editable = false, position = 1),
+    DefaultLibrary(2, "PLAN_TO_READ",  R.string.type_plan_to_read.toString(), editable = false, position = 2),
+    DefaultLibrary(3, "ON_HOLD",       R.string.type_on_hold.toString(),      editable = false, position = 3),
+    DefaultLibrary(4, "COMPLETED",     R.string.type_completed.toString(),    editable = false, position = 4),
+    DefaultLibrary(5, "DROPPED",       R.string.type_dropped.toString(),      editable = false, position = 5),
 )
 /**
  * Returns the list of persisted libraries, sorted by [DefaultLibrary.position].
@@ -328,6 +329,31 @@ fun Context.reassignLibraryBookmarks(sourceId: Int, targetId: Int = 0) {
         if (current == sourceId) {
             with(DataStore) { this@reassignLibraryBookmarks.setKey(key, targetId) }
         }
+    }
+}
+
+fun Context.mergeLibraries(backupJson: String) {
+    try {
+        val currentLibs = getLibraries().toMutableList()
+        val currentKeys = currentLibs.map { it.key }.toSet()
+
+        val backupLibs = parseJson<List<DefaultLibrary>>(backupJson)
+
+        val newLibs = backupLibs.filter { it.key !in currentKeys }
+
+        if (newLibs.isNotEmpty()) {
+            var lastId = currentLibs.maxOfOrNull { it.id } ?: 0
+            var lastPos = currentLibs.maxOfOrNull { it.position } ?: 0
+
+            newLibs.forEach { lib ->
+                lastId++
+                lastPos++
+                currentLibs.add(lib.copy(id = lastId, position = lastPos))
+            }
+            saveLibraries(currentLibs)
+        }
+    } catch (e: Exception) {
+       logError(e)
     }
 }
 

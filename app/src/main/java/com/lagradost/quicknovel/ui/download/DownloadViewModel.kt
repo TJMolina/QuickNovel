@@ -274,150 +274,201 @@ class DownloadViewModel : ViewModel() {
     }
 
     private fun sortArray(
-        currentArray: List<DownloadFragment.DownloadDataLoaded>,
+        currentArray: ArrayList<DownloadFragment.DownloadDataLoaded>,
     ): List<DownloadFragment.DownloadDataLoaded> {
-        val filtered = currentArray.filter { matchesQuery(it.name) }
-        if(filtered.isEmpty()) return emptyList()
-
         val newSortingMethod = getKey(DOWNLOAD_SETTINGS, DOWNLOAD_SORTING_METHOD) ?: DEFAULT_SORT
+        setKey(DOWNLOAD_SETTINGS, DOWNLOAD_SORTING_METHOD, newSortingMethod)
+
         return when (newSortingMethod) {
-            ALPHA_SORT -> filtered.sortedBy { it.name }
-            REVERSE_ALPHA_SORT -> filtered.sortedByDescending { it.name }
-
-
-            REVERSE_DOWNLOADSIZE_SORT  -> filtered.sortedBy { it.downloadedCount }
-            DOWNLOADSIZE_SORT -> filtered.sortedByDescending { it.downloadedCount }
-
-
-            DOWNLOADPRECENTAGE_SORT -> filtered.sortedByDescending {
-                it.downloadedCount.toFloat() / (if(it.downloadedTotal <= 0) 1 else it.downloadedTotal)
-            }
-            REVERSE_DOWNLOADPRECENTAGE_SORT -> filtered.sortedBy {
-                it.downloadedCount.toFloat() / (if(it.downloadedTotal <= 0) 1 else it.downloadedTotal)
+            ALPHA_SORT -> {
+                currentArray.sortBy { t -> t.name }
+                currentArray
             }
 
-            LAST_UPDATED_SORT -> filtered.sortedByDescending { it.lastDownloaded ?: 0L }
-            REVERSE_LAST_UPDATED_SORT -> filtered.sortedBy { it.lastDownloaded ?: 0L }
+            REVERSE_ALPHA_SORT -> {
+                currentArray.sortByDescending { t -> t.name }
+                currentArray
+            }
 
-            REVERSE_LAST_ACCES_SORT, LAST_ACCES_SORT, DEFAULT_SORT -> {
-                val accessTimes = filtered.associate {
-                    it.id to (getKey<Long>(DOWNLOAD_EPUB_LAST_ACCESS, it.id.toString(), 0L) ?: 0L)
+            DOWNLOADSIZE_SORT -> {
+                currentArray.sortByDescending { t -> t.downloadedCount }
+                currentArray
+            }
+
+            REVERSE_DOWNLOADSIZE_SORT -> {
+                currentArray.sortBy { t -> t.downloadedCount }
+                currentArray
+            }
+
+            DOWNLOADPRECENTAGE_SORT -> {
+                currentArray.sortByDescending { t -> t.downloadedCount.toFloat() / t.downloadedTotal }
+                currentArray
+            }
+
+            REVERSE_DOWNLOADPRECENTAGE_SORT -> {
+                currentArray.sortBy { t -> t.downloadedCount.toFloat() / t.downloadedTotal }
+                currentArray
+            }
+
+            REVERSE_LAST_ACCES_SORT -> {
+                currentArray.sortBy { t ->
+                    (getKey<Long>(
+                        DOWNLOAD_EPUB_LAST_ACCESS,
+                        t.id.toString(),
+                        0
+                    )!!)
                 }
-
-                if (newSortingMethod == REVERSE_LAST_ACCES_SORT) {
-                    filtered.sortedBy { accessTimes[it.id] }
-                } else {
-                    filtered.sortedByDescending { accessTimes[it.id] }
-                }
+                currentArray
             }
-            else -> filtered
-        }
+
+            LAST_UPDATED_SORT -> {
+                if (currentArray.any { it.lastDownloaded == null }) {
+                    currentArray.sortByDescending { t ->
+                        (getKey<Long>(
+                            DOWNLOAD_EPUB_LAST_ACCESS,
+                            t.id.toString(),
+                            0
+                        )!!)
+                    }
+                }
+                currentArray.sortByDescending { it.lastDownloaded ?: 0L }
+                currentArray
+            }
+
+            REVERSE_LAST_UPDATED_SORT -> {
+                if (currentArray.any { it.lastDownloaded == null }) {
+                    currentArray.sortByDescending { t ->
+                        (getKey<Long>(
+                            DOWNLOAD_EPUB_LAST_ACCESS,
+                            t.id.toString(),
+                            0
+                        )!!)
+                    }
+                }
+                currentArray.sortBy { it.lastDownloaded ?: 0L }
+                currentArray
+            }
+            //DEFAULT_SORT, LAST_ACCES_SORT
+            else -> {
+                currentArray.sortByDescending { t ->
+                    (getKey<Long>(
+                        DOWNLOAD_EPUB_LAST_ACCESS,
+                        t.id.toString(),
+                        0
+                    )!!)
+                }
+                currentArray
+            }
+        }.filter { matchesQuery(it.name) }
     }
 
     private fun sortNormalArray(
-        currentArray: List<ResultCached>,
+        currentArray: ArrayList<ResultCached>,
     ): List<ResultCached> {
         val newSortingMethod =
             getKey(DOWNLOAD_SETTINGS, DOWNLOAD_NORMAL_SORTING_METHOD) ?: DEFAULT_SORT
         setKey(DOWNLOAD_SETTINGS, DOWNLOAD_NORMAL_SORTING_METHOD, newSortingMethod)
-        val filtered = currentArray.filter { matchesQuery(it.name) }
-        return when (newSortingMethod) {
-            ALPHA_SORT -> filtered.sortedBy { t -> t.name }
-            REVERSE_ALPHA_SORT -> filtered.sortedByDescending { t -> t.name }
 
-            REVERSE_LAST_ACCES_SORT -> filtered.sortedBy { t ->
-                (getKey<Long>(
-                    DOWNLOAD_EPUB_LAST_ACCESS,
-                    t.id.toString(),
-                    0
-                )!!)
+        return when (newSortingMethod) {
+            ALPHA_SORT -> {
+                currentArray.sortBy { t -> t.name }
+                currentArray
+            }
+
+            REVERSE_ALPHA_SORT -> {
+                currentArray.sortByDescending { t -> t.name }
+                currentArray
+            }
+
+            REVERSE_LAST_ACCES_SORT -> {
+                currentArray.sortBy { t ->
+                    (getKey<Long>(
+                        DOWNLOAD_EPUB_LAST_ACCESS,
+                        t.id.toString(),
+                        0
+                    )!!)
+                }
+                currentArray
             }
             // DEFAULT_SORT, LAST_ACCES_SORT
-            else -> filtered.sortedByDescending { t ->
-                (getKey<Long>(
-                    DOWNLOAD_EPUB_LAST_ACCESS,
-                    t.id.toString(),
-                    0
-                )!!)
+            else -> {
+                currentArray.sortByDescending { t ->
+                    (getKey<Long>(
+                        DOWNLOAD_EPUB_LAST_ACCESS,
+                        t.id.toString(),
+                        0
+                    )!!)
+                }
+                currentArray
             }
-
-        }
+        }.filter { matchesQuery(it.name) }
     }
 
+    // very shitty copy as we need to deep copy to actually update it
     fun resortAllData() {
         val data = _pages.value ?: return
-        if (data.isEmpty()) return
-
-        val newList = data.mapIndexed { index, page ->
-            if (index == 0) {
-                page.copy(
-                    items = sortArray(page.unsortedItems.filterIsInstance<DownloadFragment.DownloadDataLoaded>())
-                )
-            } else {
-                page.copy(
-                    items = sortNormalArray(ArrayList(page.unsortedItems.filterIsInstance<ResultCached>()))
-                )
-            }
+        if (data.isEmpty()) {
+            return
         }
-
-        _pages.value = newList
+        val list = arrayListOf<Page>()
+        list.add(
+            data[0].copy(
+                unsortedItems = data[0].unsortedItems,
+                items = sortArray(ArrayList(data[0].unsortedItems.map { (it as DownloadFragment.DownloadDataLoaded).copy() }))
+            )
+        )
+        for (i in 1..data.lastIndex) {
+            list.add(
+                data[i].copy(
+                    unsortedItems = data[i].unsortedItems,
+                    items = sortNormalArray(ArrayList(data[i].unsortedItems.map { (it as ResultCached).copy() }))
+                )
+            )
+        }
+        _pages.postValue(list)
     }
 
     fun loadAllData(refreshAll: Boolean) = viewModelScope.launch {
         if (refreshAll) fetchAllData(false)
-        val libraries = libraries()
+        val libs = libraries()
 
-        val pages = withContext(Dispatchers.IO) {
-            //this will save all novels data
-            val mapping = LinkedHashMap<Int, MutableList<ResultCached>>()
-            //separate by specific library
-            libraries.forEach { lib -> mapping[lib.id] = mutableListOf() }
+        val mapping = LinkedHashMap<Int, ArrayList<ResultCached>>().apply {
+            libs.forEach { lib -> put(lib.id, arrayListOf()) }
+        }
 
-            //get all novel's id saved in libraries
-            val keys = getKeys(RESULT_BOOKMARK_STATE) ?: emptyList()
-            for (key in keys) {
-                //library id from this specific novel
+        withContext(Dispatchers.IO) {
+            val keys = getKeys(RESULT_BOOKMARK_STATE)
+            for (key in keys ?: emptyList()) {
                 val type = getKey<Int>(key) ?: continue
-                //novel id
-                val id = key.replaceFirst(RESULT_BOOKMARK_STATE, RESULT_BOOKMARK)
-                //get novel info
+                val id = key.replaceFirst(
+                    RESULT_BOOKMARK_STATE,
+                    RESULT_BOOKMARK
+                )
                 val cached = getKey<ResultCached>(id) ?: continue
                 mapping[type]?.add(cached)
             }
-
-            val pagesList = mutableListOf<Page>()
-            pagesList.add(getDownloadedCards())
-
-            //sort library
-            for (lib in libraries) {
-                val items = mapping[lib.id] ?: mutableListOf()
-                val sortedItems = sortNormalArray(items)
-
-                pagesList.add(Page(lib.title, unsortedItems = ArrayList(items), items = sortedItems))
-            }
-            pagesList
         }
 
-        _pages.value = pages
+        val pages = mutableListOf<Page>()
+
+        pages.add(getDownloadedCards())
+
+        for (lib in libs) {
+            val items = mapping[lib.id] ?: arrayListOf()
+            val sortedItems = sortNormalArray(ArrayList(items))
+            pages.add(Page(lib.title, unsortedItems = items, items = sortedItems))
+        }
+
+        _pages.postValue(pages)
     }
 
-    private suspend fun getDownloadedCards(): Page {
-        val rawValues = cardsDataMutex.withLock {
-            cardsData.values.toList()
-        }
-
-        val sorted = withContext(Dispatchers.Default) {
-            sortArray(rawValues)
-        }
-
-        return Page(
-            ReadType.NONE.name,
-            unsortedItems = ArrayList(rawValues),
-            items = sorted
+    private suspend fun getDownloadedCards(): Page = cardsDataMutex.withLock {
+        Page(
+            ReadType.NONE.name, unsortedItems = ArrayList(cardsData.values),
+            items =
+                sortArray(ArrayList(cardsData.values))
         )
     }
-
-
 
 
     private suspend fun postCards() {

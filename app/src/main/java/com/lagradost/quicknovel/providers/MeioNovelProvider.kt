@@ -25,7 +25,9 @@ open class MeioNovelProvider : MoreNovelProvider() {
         //This is for migrating NovLove URLs.
         val path = url.substringAfter("://").substringAfter("/", "")
         val adaptedPath = path.replaceFirst("novel/", "read/")
-        val finalUrl = "${mainUrl}/$adaptedPath".removeSuffix("/")
+        val finalUrl = "${mainUrl.removeSuffix("/")}/$adaptedPath/"
+
+
         val document = app.get(finalUrl).document
         val name =
             document.selectFirst("div.post-title > h1")?.text()?.replace("  ", " ")

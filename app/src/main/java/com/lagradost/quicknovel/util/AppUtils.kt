@@ -1,6 +1,5 @@
 package com.lagradost.quicknovel.util
 
-import android.R.attr.text
 import android.app.ActivityManager
 import android.content.Context
 import com.fasterxml.jackson.databind.DeserializationFeature

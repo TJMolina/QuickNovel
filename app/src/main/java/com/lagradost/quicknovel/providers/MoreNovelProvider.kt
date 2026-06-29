@@ -156,23 +156,43 @@ open class MoreNovelProvider : MainAPI() {
     }
 
     suspend fun getChapters(url: String): List<ChapterData> {
-
+        //get chapters page
         val document = app.post(
-            "${url.removeSuffix("/")}/ajax/chapters/",
+            "${url.removeSuffix("/")}/ajax/chapters/?t=1",
         ).document
+
         val data: ArrayList<ChapterData> = ArrayList()
+
+        //chek whether there are pagination
+        val totalChapters = document.selectFirst("div.nn-chapter-page-info")?.text()
+            ?.substringBefore(" total chapters")
+            ?.substringAfterLast(" ")
+            ?.toIntOrNull()
+        if (totalChapters != null) {
+            for (i in 1..totalChapters) {
+                val cName = "Chapter $i"
+                val cUrl = "${url.removeSuffix("/")}/chapter-$i/"
+                data.add(ChapterData(cName, cUrl, null, 0))
+            }
+            return data
+        }
+
+
+        //if there isn't pagination
         val chapterHeaders = document.select("ul.version-chap li.wp-manga-chapter")
         for (c in chapterHeaders) {
             val header = c.selectFirst("> a")
-            val cUrl = header?.attr("href")
-            val cName = header?.text()?.replace("  ", " ")?.replace("\n", "")
-                ?.replace("\t", "") ?: continue
+            val cUrl = header?.attr("href") ?: continue
+            val cName = header.text().replace("  ", " ").replace("\n", "")
+                .replace("\t", "")
             val added = c.selectFirst("> span.chapter-release-date > i")?.text()
-            data.add(ChapterData(cName, cUrl ?: continue, added, 0))
+            data.add(ChapterData(cName, cUrl, added, 0))
         }
+
         data.reverse()
         return data
     }
+
 
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url).document

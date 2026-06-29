@@ -24,13 +24,11 @@ open class MeioNovelProvider : MoreNovelProvider() {
     override suspend fun load(url: String): LoadResponse? {
         //This is for migrating NovLove URLs.
         val path = url.substringAfter("://").substringAfter("/", "")
-        val adaptedPath = path.replaceFirst("novel/", "read/")
+        val adaptedPath = path.replaceFirst("/novel/", "/read/")
         val finalUrl = "${mainUrl}/$adaptedPath".removeSuffix("/")
         val document = app.get(finalUrl).document
         val name =
-            document.selectFirst("div.post-title > h1")?.text()?.replace("  ", " ")
-                ?.replace("\n", "")
-                ?.replace("\t", "") ?: return null
+            document.selectFirst("h1")?.text() ?: return null
         val data = getChapters(finalUrl)
         return newStreamResponse(url = finalUrl, name = name, data = data) {
             tags = document.select("div.genres-content > a").map { it.text() }

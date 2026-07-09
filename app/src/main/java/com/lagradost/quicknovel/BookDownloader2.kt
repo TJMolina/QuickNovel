@@ -68,7 +68,6 @@ import com.lagradost.quicknovel.util.Coroutines.main
 import com.lagradost.quicknovel.util.Event
 import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
-import com.lagradost.quicknovel.util.pmap
 import com.lagradost.safefile.SafeFile
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
@@ -87,7 +86,6 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import me.ag2s.epublib.domain.Author
 import me.ag2s.epublib.domain.EpubBook
-import me.ag2s.epublib.domain.MediaType
 import me.ag2s.epublib.domain.MediaTypes
 import me.ag2s.epublib.domain.Resource
 import me.ag2s.epublib.epub.EpubReader
@@ -98,6 +96,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.random.Random
 import kotlin.io.readBytes
 
 enum class DownloadActionType {
@@ -732,30 +731,34 @@ object BookDownloader2Helper {
             if (rateLimit) {
                 api.api.rateLimitMutex.lock()
             }
+            var success = false
             try {
                 val page = api.loadHtml(data.url)
 
                 if (!page.isNullOrBlank()) {
                     rFile.createNewFile() // only create the file when actually needed
                     rFile.writeText("${data.name}\n${page}")
-                    if (api.rateLimitTime > 0) {
-                        delay(api.rateLimitTime)
-                    }
-                    return@withContext true
-                } else {
-                    delay(5000L * (i + 1)) // ERROR
-                    if (api.rateLimitTime > 0) {
-                        delay(api.rateLimitTime)
-                    }
+                    success = true
                 }
-            }catch (e: Exception) {
+            } catch (e: Exception) {
                 logError(e)
-                delay(5000L * (i + 1))
-            }
-            finally {
+            } finally {
                 if (rateLimit) {
                     api.api.rateLimitMutex.unlock()
                 }
+            }
+
+            if (success) {
+                if (api.rateLimitTime > 0) {
+                    val jitter = Random.nextLong(-500, 500)
+                    val totalDelay = (api.rateLimitTime + jitter).coerceAtLeast(100L)
+                    delay(totalDelay)
+                }
+                return@withContext true
+            } else {
+                val baseBackoff = 3000L * (1 shl i)
+                val jitter = Random.nextLong(1000, 5000)
+                delay(baseBackoff + jitter) // ERROR
             }
         }
         return@withContext false
@@ -800,6 +803,10 @@ object BookDownloader2Helper {
                 LOCAL_EPUB
             )
             if (epubFile.exists() && epubFile.length() > LOCAL_EPUB_MIN_SIZE) {
+                epubFile.inputStream().use { input ->
+                    input.copyTo(fileStream)
+                }
+
                 epubFile.inputStream().use { input ->
                     input.copyTo(fileStream)
                 }
@@ -1278,11 +1285,14 @@ object BookDownloader2 {
     }
 
 
-    suspend fun getOldDataReadingProgress(currentLibraryIndex: Int) {
+    /**
+     * This get all novels in a specific library and refresh their total chapters
+     * */
+    suspend fun refreshNovelTotalChapters(currentLibraryIndex: Int) {
         if (currentLibraryIndex <= 0) return   // Tab 0 = Downloads
-        val keys = getKeys(RESULT_BOOKMARK_STATE) ?: return
+        val keys      = getKeys(RESULT_BOOKMARK_STATE) ?: return
         val libraries = (context ?: return).getLibraries()
-        val library = libraries.getOrNull(currentLibraryIndex - 1) ?: return
+        val library   = libraries.getOrNull(currentLibraryIndex - 1) ?: return
         coroutineScope {
             for (key in keys) {
                 val state = getKey<Int>(key)

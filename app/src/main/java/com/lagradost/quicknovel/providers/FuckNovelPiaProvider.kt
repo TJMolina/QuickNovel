@@ -1,6 +1,7 @@
 package com.lagradost.quicknovel.providers
 
 import android.net.Uri
+import android.webkit.CookieManager
 import com.lagradost.quicknovel.HeadMainPageResponse
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
@@ -11,13 +12,14 @@ import com.lagradost.quicknovel.newChapterData
 import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.setStatus
+import com.lagradost.quicknovel.util.CommonHeaders.ajaxHeaders
 
 
 class FuckNovelPiaProvider :  MainAPI() {
     override val name = "FuckNovelPia"
     override val mainUrl = "https://fucknovelpia.com"
     override val iconId = R.drawable.icon_fucknovelpia
-
+    override val rateLimitTime = 1000L
 
     override val hasMainPage = true
 
@@ -123,7 +125,8 @@ class FuckNovelPiaProvider :  MainAPI() {
     }
 
     override suspend fun loadHtml(url: String): String? {
-        val document = app.get(url).document
+        CookieManager.getInstance().removeAllCookies(null)
+        val document = app.get(url, ajaxHeaders(url)).document
         val reader = document.selectFirst("div.reader") ?: return null
         val titleEl = reader.selectFirst("h1")
         var title = titleEl?.text() ?: ""

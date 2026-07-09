@@ -256,11 +256,6 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
 
         //swipe_container.setProgressBackgroundColorSchemeColor(requireContext().colorFromAttribute(R.attr.darkBackground))
 
-        //libraries button
-        binding.downloadLibraryManagerIcon.setOnClickListener {
-            activity.navigate(R.id.navigation_library_section)
-        }
-
         binding.swipeContainer.apply {
             setColorSchemeColors(context.colorFromAttribute(R.attr.colorPrimary))
             setProgressBackgroundColorSchemeColor(context.colorFromAttribute(R.attr.primaryGrayBackground))

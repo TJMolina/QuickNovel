@@ -57,4 +57,12 @@ object AppUtils {
                 }
             }
     }
+
+    fun String.toLibraryKey(): String {
+        val sanitized = this.uppercase()
+            .replace(" ", "_")
+            .replace(Regex("[^A-Z0-9_]"), "")
+            .trim('_')
+        return if (sanitized.isEmpty()) "" else "CUSTOM_$sanitized"
+    }
 }

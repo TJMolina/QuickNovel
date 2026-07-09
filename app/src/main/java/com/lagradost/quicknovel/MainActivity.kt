@@ -54,6 +54,7 @@ import com.lagradost.quicknovel.mvvm.safe
 import com.lagradost.quicknovel.network.CloudflareKiller
 import com.lagradost.quicknovel.providers.RedditProvider
 import com.lagradost.quicknovel.ui.download.DownloadFragment
+import com.lagradost.quicknovel.ui.library.LibraryManager
 import com.lagradost.quicknovel.ui.result.ResultFragment
 import com.lagradost.quicknovel.ui.result.ResultViewModel
 import com.lagradost.quicknovel.ui.search.SearchFragment
@@ -80,7 +81,6 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.reflect.KClass
-import com.lagradost.quicknovel.util.SingleSelectionHelper.showBottomDialogWithAction
 
 class MainActivity : AppCompatActivity() {
     companion object {
@@ -630,35 +630,31 @@ class MainActivity : AppCompatActivity() {
                         downloadDeleteTrashFromResult.setOnClickListener {
                             viewModel.deleteAlert()
                         }
-                        //change bookmark
-                        bookmark.setOnClickListener { view ->
-                            val context = view.context ?: return@setOnClickListener
-                            val libraries = context.getLibraries()
-                            val allOptions = listOf(context.getString(R.string.type_none)) + libraries.map { it.title }
-                            val currentLibraryId = viewModel.libraryId.value ?: 0
-                            val selectedIndex = if (currentLibraryId == 0) 0 else libraries.indexOfFirst { it.id == currentLibraryId } + 1
+                        //show bottom dialog with libraries
+                            bookmark.setOnClickListener { view ->
+                                val context = view.context ?: return@setOnClickListener
+                                val libraries = context.getLibraries()
+                                val allOptions = mutableListOf(DefaultLibrary(-1, "", context.getString(R.string.type_none), false, -1))
+                                allOptions.addAll(libraries)
 
-                            context.showBottomDialogWithAction(
-                                allOptions,
-                                selectedIndex = selectedIndex,
-                                context.getString(R.string.bookmark),
-                                false, {},
-                                {
-                                    bottomPreviewPopup?.dismissSafe(this@MainActivity)
-                                    this@MainActivity.navigate(R.id.navigation_library_section)
-                                }
-                            ) { selected ->
-                                //library none
-                                if (selected == 0) {
-                                    viewModel.bookmark(0)
-                                } else {
-                                    val selectedLibrary = libraries.getOrNull(selected - 1) ?: return@showBottomDialogWithAction
-                                    viewModel.bookmark(selectedLibrary.id)
+                                val currentLibraryId = viewModel.libraryId.value ?: 0
+                                val selectedIndex = if (currentLibraryId == 0) 0 else libraries.indexOfFirst { it.id == currentLibraryId } + 1
+
+                                LibraryManager.showLibraryBottomDialog(
+                                    context,
+                                    allOptions,
+                                    selectedIndex = selectedIndex,
+                                    context.getString(R.string.bookmark)
+                                ) { selected ->
+                                    if (selected == 0) {
+                                        viewModel.bookmark(0)
+                                    } else {
+                                        val selectedLibrary = libraries.getOrNull(selected - 1) ?: return@showLibraryBottomDialog
+                                        viewModel.bookmark(selectedLibrary.id)
+                                    }
                                 }
                             }
-                        }
-
-                        readMore.setOnClickListener {
+                            readMore.setOnClickListener {
                             loadResult(d.url, viewModel.apiName)
                             hidePreviewPopupDialog()
                         }

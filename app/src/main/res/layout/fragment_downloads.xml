@@ -36,16 +36,6 @@
                 app:searchIcon="@drawable/search_icon"
                 tools:ignore="RtlSymmetry" />
         </FrameLayout>
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/download_library_manager_icon"
-            style="@style/Widget.Material3.Button.IconButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            android:contentDescription="@string/library_manager_title"
-            app:icon="@drawable/ic_baseline_collections_bookmark_24"
-            app:iconTint="?attr/textColor" />
     </LinearLayout>
 
     <FrameLayout

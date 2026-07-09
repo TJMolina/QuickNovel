@@ -261,11 +261,6 @@ class SettingsFragment : PreferenceFragmentCompat() {
             return@setOnPreferenceClickListener true
         }
 
-        getPref(R.string.library_manager_key)?.setOnPreferenceClickListener {
-            activity.navigate(R.id.navigation_library_section)
-            true
-        }
-
         getPref(R.string.restore_key)?.setOnPreferenceClickListener {
             activity?.restorePrompt()
             return@setOnPreferenceClickListener true

@@ -1,4 +1,6 @@
 package com.lagradost.quicknovel.ui.library
+
+import android.annotation.SuppressLint
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.ViewGroup
@@ -7,32 +9,47 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.lagradost.quicknovel.DEFAULT_LIBRARIES
 import com.lagradost.quicknovel.DefaultLibrary
+import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.databinding.ItemLibrarySectionBinding
 import com.lagradost.quicknovel.ui.BaseDiffCallback
 import com.lagradost.quicknovel.ui.NoStateAdapter
 import com.lagradost.quicknovel.ui.ViewHolderState
+import com.lagradost.quicknovel.util.UIHelper.popupMenu
 import java.util.Collections
 
 class LibrarySectionAdapter(
-    private val onRenameClick: (DefaultLibrary) -> Unit,
-    private val onMergeClick: (DefaultLibrary) -> Unit,
-    private val onDeleteClick: (DefaultLibrary) -> Unit,
-    private val onDragFinished: () -> Unit,
+    private var selectedIndex: Int,
+    private val onDragFinished: (List<DefaultLibrary>) -> Unit,
+    private val onItemClick: (Int) -> Unit
 ) : NoStateAdapter<DefaultLibrary>(
     diffCallback = BaseDiffCallback(
         itemSame = { a, b -> a.id == b.id },
         contentSame = { a, b -> a == b }
     )
 ) {
-    private var counts = mutableMapOf<Int, Int>()
+    //This will show or hide the buttons that allow editing attributes
+    private var isEditing = false
+
+    //Prevent the delete buttons from being displayed for the default libraries.
     private val builtInKeys = DEFAULT_LIBRARIES.map { it.key }.toSet()
+
+    //This handles dragging the titles and updating their positions
     val itemTouchHelper = ItemTouchHelper(object : ItemTouchHelper.Callback() {
         override fun getMovementFlags(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int {
+            //In several places, I apply similar checks to prevent the user from interacting
+            //with the first library, which is the None library
+            if (viewHolder.bindingAdapterPosition == 0) return makeMovementFlags(0,0)
             return makeMovementFlags(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0)
         }
 
         override fun onMove(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
-            moveItemVisual(viewHolder.bindingAdapterPosition, target.bindingAdapterPosition)
+            val fromPos = viewHolder.bindingAdapterPosition
+            val targetPos = target.bindingAdapterPosition
+
+            //Prevent the None library from being moved
+            if (fromPos == 0 || targetPos == 0) return false
+
+            moveItemVisual(fromPos, targetPos)
             return true
         }
 
@@ -41,30 +58,26 @@ class LibrarySectionAdapter(
 
         override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
             super.clearView(recyclerView, viewHolder)
-            onDragFinished()
+            onDragFinished(immutableCurrentList.filter { it.id != -1 })
         }
     })
 
-    fun submitList(newItems: List<DefaultLibrary>, novelCounts: Map<Int, Int> = emptyMap()) {
-        counts.clear()
-        counts.putAll(novelCounts)
-        super.submitList(newItems, null)
+    fun moveItemVisual(fromPosition: Int, toPosition: Int) {
+        val currentItems = immutableCurrentList
+        //Do not replace the position of None
+        if (fromPosition <= 0 || toPosition <= 0) return
+        //This could all be done in a single if, but using three makes it clearer
+        if (fromPosition !in currentItems.indices) return
+        if (toPosition !in currentItems.indices) return
+        if(fromPosition == toPosition) return
+        Collections.swap(currentItems, fromPosition, toPosition)
+        submitList(currentItems)
     }
 
-    fun moveItemVisual(fromPosition: Int, toPosition: Int) {
-        val currentItems = immutableCurrentList.toMutableList()
-        if (fromPosition !in currentItems.indices || toPosition !in currentItems.indices) return
-
-        if (fromPosition < toPosition) {
-            for (i in fromPosition until toPosition) {
-                Collections.swap(currentItems, i, i + 1)
-            }
-        } else {
-            for (i in fromPosition downTo toPosition + 1) {
-                Collections.swap(currentItems, i, i - 1)
-            }
-        }
-        submitList(currentItems, counts)
+    fun changeEditingStatus(newStatus: Boolean) {
+        isEditing = newStatus
+        //It's the only way I could think of to update everyone's state so the special buttons are shown
+        notifyDataSetChanged()
     }
 
     override fun onCreateContent(parent: ViewGroup): ViewHolderState<Any> {
@@ -73,30 +86,66 @@ class LibrarySectionAdapter(
         )
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onBindContent(holder: ViewHolderState<Any>, item: DefaultLibrary, position: Int) {
         val binding = holder.view as? ItemLibrarySectionBinding ?: return
         val context = binding.root.context
+
+        //is a default library?
         val isBuiltIn = item.key in builtInKeys
+        //is currently selected?
+        val isSelected = position == selectedIndex
+        //is library None?
+        val isSpecial = item.id == -1
 
-        val resId = item.title.toIntOrNull()
-        binding.sectionName.text = if (resId != null) context.getString(resId) else item.title
-
-        binding.novelCount.text = "${counts[item.id] ?: 0}"
+        binding.root.isActivated = isSelected
+        binding.libraryTitle.text = item.title
 
 
-        binding.actionRename.isVisible = isBuiltIn || item.editable
-        binding.actionMerge.isVisible = !isBuiltIn && item.editable
-        binding.actionDelete.isVisible = !isBuiltIn && item.editable
+        //Decide left icon
+        //If edit mode is enabled and it's not the None library
+        if (isEditing && !isSpecial) {
+            binding.dragHandle.setImageResource(R.drawable.ic_baseline_drag_handle_24)
+        } else if (isSelected) {//It is not being edited and the library is selected
+            binding.dragHandle.setImageResource(R.drawable.ic_baseline_check_24)
+        }
+        else{
+            binding.dragHandle.setImageResource(0)
+        }
 
-        binding.actionRename.setOnClickListener { onRenameClick(item) }
-        binding.actionMerge.setOnClickListener { onMergeClick(item) }
-        binding.actionDelete.setOnClickListener { onDeleteClick(item) }
 
-        binding.root.setOnClickListener { if (isBuiltIn) onRenameClick(item) }
+        val canEdit = !isBuiltIn && item.editable && isEditing
+        binding.actionOptions.isVisible = canEdit
 
-        binding.dragHandle.setOnTouchListener { v, event ->
-            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                v.performClick()
+
+        binding.libraryTitle.setOnClickListener {
+            //Decide what happens when I click on the library name
+            if (isEditing && !isSpecial) {
+                LibraryManager.showRenameDialog(context, item) {
+                    LibraryManager.refreshList(context, this)
+                }
+            } else {
+                onItemClick(position)
+            }
+        }
+        binding.actionOptions.setOnClickListener {
+            it.popupMenu(
+                items = listOf(
+                    1 to R.string.library_merge,
+                    2 to R.string.library_delete
+                )
+            ){
+                when(itemId){
+                    1 -> LibraryManager.showMergeDialog(context, item, this@LibrarySectionAdapter)
+                    2 -> LibraryManager.showDeleteDialog(context, item, this@LibrarySectionAdapter)
+                }
+            }
+        }
+
+        binding.dragHandle.setOnTouchListener { _, event ->
+            if (isEditing &&
+                !isSpecial &&
+                (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_UP)) {
                 itemTouchHelper.startDrag(holder)
             }
             false

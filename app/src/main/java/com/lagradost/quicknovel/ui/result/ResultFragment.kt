@@ -22,6 +22,7 @@ import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipDrawable
 import com.google.android.material.tabs.TabLayout
 import com.lagradost.quicknovel.CommonActivity
+import com.lagradost.quicknovel.DefaultLibrary
 import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainActivity.Companion.navigate
@@ -51,7 +52,7 @@ import com.lagradost.quicknovel.util.UIHelper.popupMenu
 import com.lagradost.quicknovel.util.UIHelper.setImage
 import com.lagradost.quicknovel.util.toPx
 import com.lagradost.quicknovel.getLibraries
-import com.lagradost.quicknovel.util.SingleSelectionHelper.showBottomDialogWithAction
+import com.lagradost.quicknovel.ui.library.LibraryManager
 
 const val MAX_SYNO_LENGH = 300
 
@@ -569,23 +570,26 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 override fun onTabReselected(tab: TabLayout.Tab?) {}
             })
 
+            //show bottom dialog with libraries
             resultBookmark.setOnClickListener { view ->
                 val context = view.context ?: return@setOnClickListener
                 val libraries = context.getLibraries()
-                val allOptions = listOf(context.getString(R.string.type_none)) + libraries.map { it.title }
+                val allOptions = mutableListOf(DefaultLibrary(-1, "", context.getString(R.string.type_none), false, -1))
+                allOptions.addAll(libraries)
+
                 val currentLibraryId = viewModel.libraryId.value ?: 0
                 val selectedIndex = if (currentLibraryId == 0) 0 else libraries.indexOfFirst { it.id == currentLibraryId } + 1
 
-                context.showBottomDialogWithAction(
+                LibraryManager.showLibraryBottomDialog(
+                    context,
                     allOptions,
                     selectedIndex = selectedIndex,
-                    context.getString(R.string.bookmark), false, {},
-                    { activity.navigate(R.id.navigation_library_section) }
+                    context.getString(R.string.bookmark)
                 ) { selected ->
                     if (selected == 0) {
                         viewModel.bookmark(0)
                     } else {
-                        val selectedLibrary = libraries.getOrNull(selected - 1) ?: return@showBottomDialogWithAction
+                        val selectedLibrary = libraries.getOrNull(selected - 1) ?: return@showLibraryBottomDialog
                         viewModel.bookmark(selectedLibrary.id)
                     }
                 }

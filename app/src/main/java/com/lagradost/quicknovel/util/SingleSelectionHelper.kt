@@ -21,7 +21,6 @@ object SingleSelectionHelper {
         isMultiSelect: Boolean,
         callback: (List<Int>) -> Unit,
         dismissCallback: () -> Unit,
-        plusCallBack: (() -> Unit)? = null
     ) {
         val realShowApply = showApply || isMultiSelect
         val listView = dialog.findViewById<ListView>(R.id.listview1)!!
@@ -29,13 +28,6 @@ object SingleSelectionHelper {
         val applyButton = dialog.findViewById<TextView>(R.id.apply_btt)!!
         val cancelButton = dialog.findViewById<TextView>(R.id.cancel_btt)!!
         val applyHolder = dialog.findViewById<LinearLayout>(R.id.apply_btt_holder)!!
-
-        val headerActionButton = dialog.findViewById<ImageButton>(R.id.header_action)
-        headerActionButton?.isVisible = plusCallBack != null
-        headerActionButton?.setOnClickListener {
-            plusCallBack?.invoke()
-            dialog.dismiss()
-        }
 
         applyHolder.isVisible = realShowApply
         if (!realShowApply) {
@@ -165,30 +157,6 @@ object SingleSelectionHelper {
             false,
             { callback.invoke(it.first()) },
             dismissCallback
-        )
-    }
-    fun Context.showBottomDialogWithAction(
-        items: List<String>,
-        selectedIndex: Int,
-        name: String,
-        showApply: Boolean,
-        dismissCallback: () -> Unit,
-        plusCallBack: () -> Unit,
-        callback: (Int) -> Unit,
-    ) {
-        val builder = BottomSheetDialog(this)
-        builder.setContentView(R.layout.bottom_selection_dialog_with_action)
-        builder.show()
-        showDialog(
-            builder,
-            items,
-            listOf(selectedIndex),
-            name,
-            showApply,
-            false,
-            { callback.invoke(it.first()) },
-            dismissCallback,
-            plusCallBack
         )
     }
 }

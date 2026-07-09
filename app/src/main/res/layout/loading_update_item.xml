@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="12dp"
+    android:layout_marginTop="6dp"
+    android:layout_marginBottom="6dp"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="0dp"
+    app:cardBackgroundColor="?attr/iconGrayBackground"
+    app:strokeWidth="0dp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="12dp">
+
+        <!-- Skeleton Cover -->
+        <View
+            android:id="@+id/loading_cover"
+            android:layout_width="56dp"
+            android:layout_height="80dp"
+            android:background="?attr/boxItemBackground"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Skeleton Title Line 1 -->
+        <View
+            android:id="@+id/loading_title"
+            android:layout_width="0dp"
+            android:layout_height="14dp"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="100dp"
+            android:background="?attr/boxItemBackground"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/loading_cover"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Skeleton Title Line 2 (Short) -->
+        <View
+            android:layout_width="100dp"
+            android:layout_height="14dp"
+            android:layout_marginTop="6dp"
+            android:background="?attr/boxItemBackground"
+            app:layout_constraintStart_toStartOf="@id/loading_title"
+            app:layout_constraintTop_toBottomOf="@id/loading_title" />
+
+        <!-- Skeleton Status Line -->
+        <View
+            android:id="@+id/loading_status"
+            android:layout_width="140dp"
+            android:layout_height="12dp"
+            android:layout_marginTop="12dp"
+            android:background="?attr/boxItemBackground"
+            app:layout_constraintStart_toStartOf="@id/loading_title"
+            app:layout_constraintTop_toBottomOf="@id/loading_title"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Skeleton Buttons (Circles) -->
+        <View
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="8dp"
+            android:background="?attr/boxItemBackground"
+            android:backgroundTint="?attr/grayTextColor"
+            android:alpha="0.2"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/loading_remove_circle"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <View
+            android:id="@+id/loading_remove_circle"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?attr/boxItemBackground"
+            android:backgroundTint="?attr/grayTextColor"
+            android:alpha="0.2"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</com.google.android.material.card.MaterialCardView>

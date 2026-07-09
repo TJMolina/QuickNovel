@@ -570,6 +570,11 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 override fun onTabReselected(tab: TabLayout.Tab?) {}
             })
 
+            //bell to watch a novel. Toggle status.
+            resultWatch.setOnClickListener {
+                viewModel.changeWatchingStatus()
+            }
+
             //show bottom dialog with libraries
             resultBookmark.setOnClickListener { view ->
                 val context = view.context ?: return@setOnClickListener
@@ -665,6 +670,26 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
             adapter = mainPageAdapter
             setHasFixedSize(true)
         }
+
+        //change bell status
+        observe(viewModel.isWatching){ isWatching ->
+                binding.resultWatch.apply {
+                    if(isWatching) {
+                        setCompoundDrawablesWithIntrinsicBounds(
+                            0, 0, 0,
+                            R.drawable.ic_baseline_notifications_active_24
+                        )
+                        text = getString(R.string.updates_watching)
+                    }
+                    else {
+                        setCompoundDrawablesWithIntrinsicBounds(0, 0, 0,
+                            R.drawable.ic_baseline_notifications_outline_24)
+                        text = getString(R.string.updates_watch)
+                    }
+                }
+
+        }
+
 
         observeNullable(viewModel.chapters) { chapters ->
             (binding.chapterList.adapter as? ChapterAdapter)?.let { adapter ->

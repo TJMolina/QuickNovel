@@ -47,6 +47,8 @@ import com.lagradost.quicknovel.ui.download.LAST_ACCES_SORT
 import com.lagradost.quicknovel.ui.download.REVERSE_CHAPTER_SORT
 import com.lagradost.quicknovel.ui.download.REVERSE_LAST_ACCES_SORT
 import com.lagradost.quicknovel.ui.download.SortingMethod
+import com.lagradost.quicknovel.ui.updates.data.UpdatesManager
+import com.lagradost.quicknovel.ui.updates.data.WatchEntry
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.ResultCached
@@ -190,6 +192,8 @@ class ResultViewModel : ViewModel() {
 
     var id: MutableLiveData<Int> = MutableLiveData<Int>(-1)
     var libraryId: MutableLiveData<Int> = MutableLiveData<Int>(0)
+    //to bell status
+    var isWatching: MutableLiveData<Boolean> = MutableLiveData<Boolean>(false)
     var apiName : String = ""
 
     /*This is to detect whether it actually returned to
@@ -248,6 +252,30 @@ class ResultViewModel : ViewModel() {
 
                     else -> {}
                 }
+            }
+        }
+    }
+
+    fun changeWatchingStatus(){
+        isWatching.value?.let { newIsWatchingStatus ->
+            isWatching.postValue(!newIsWatchingStatus)
+            if(!newIsWatchingStatus){
+                //save novel data to watch
+                UpdatesManager.saveEntry(WatchEntry.fromCached(ResultCached(
+                    loadUrl,
+                    load.name,
+                    apiName,
+                    loadId,
+                    load.author,
+                    load.posterUrl,
+                    load.tags,
+                    load.rating,
+                    (load as? StreamResponse)?.data?.size ?: 1,
+                    System.currentTimeMillis(),
+                    synopsis = load.synopsis
+                )))
+            }else{
+                UpdatesManager.removeFromWatchList(loadId)
             }
         }
     }
@@ -704,7 +732,7 @@ class ResultViewModel : ViewModel() {
 
         val currentLibraryId = getKey<Int>(RESULT_BOOKMARK_STATE, novelId.toString()) ?: 0
         libraryId.postValue(currentLibraryId)
-
+        isWatching.postValue(UpdatesManager.getEntry(novelId) != null)
         setKey(
             DOWNLOAD_EPUB_LAST_ACCESS, novelId.toString(), System.currentTimeMillis()
         )

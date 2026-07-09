@@ -227,6 +227,7 @@ object DataStore {
     }
 }
 
+const val NOVEL_WATCH_FOLDER: String = "novel_watch_entries"
 const val LIBRARIES_KEY: String = "default_libraries"
 data class DefaultLibrary(
     val id: Int,

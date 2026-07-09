@@ -209,13 +209,14 @@
     <string name="library_display_mode">Estilo de la biblioteca</string>
     <string name="grid_view">Cuadrícula</string>
     <string name="list_view">Lista</string>
-    <string name="show_app_updates">Mostrar actualizaciones</string>
+    <string name="show_app_updates">Mostrar actualizaciones de la app</string>
     <string name="show_app_updates_desc">Buscar actualizaciones automáticamente al iniciar</string>
     <string name="external_reader">Lector externo</string>
+    <string name="reader">Lector</string>
     <string name="external_reader_desc">Utilizar una aplicación externa para leer</string>
     <string name="remove_bloat">Eliminar contenido innecesario</string>
     <string name="remove_bloat_desc">Elimina el título y traductor de las páginas (aumenta carga)</string>
-    <string name="check_for_update">Buscar actualizaciones</string>
+    <string name="check_for_update">Buscar actualizaciones de la app</string>
     <string name="new_update_found_format">¡Nueva actualización disponible!\n %s -> %s</string>
     <string name="no_update_found">No hay actualización</string>
 
@@ -321,4 +322,55 @@
     <string name="operation_no_implemented">" Esta operación no está implementada."</string>
     <string name="conection_error">Error de conexión.</string>
     <string name="unknown">Desconocido</string>
+
+    <!-- Novel Updates -->
+    <string name="updates_watch">Seguir</string>
+    <string name="updates_watching">Siguiendo</string>
+    <string name="updates_title">Actualizaciones</string>
+    <string name="updates_check_all">Verificar todo</string>
+    <string name="updates_check_now">Verificar ahora</string>
+    <string name="updates_add_novels">Agregar novelas</string>
+    <string name="updates_mark_seen">Marcar como visto</string>
+    <string name="updates_checking">Verificando&#8230;</string>
+    <string name="updates_not_checked">Aún no verificado — toca sincronizar para verificar</string>
+    <string name="updates_check_failed">Error al verificar — toca sincronizar para reintentar</string>
+    <string name="updates_new_chapters">%1$d capítulos nuevos (%2$d en total)</string>
+    <string name="updates_up_to_date">Al día (%1$d capítulos)</string>
+    <string name="updates_empty_title">No hay actualizaciones</string>
+    <string name="updates_empty_hint">Toca + para agregar novelas de tu biblioteca para monitorear nuevos capítulos.</string>
+    <string name="updates_all_added">Todas las novelas de la biblioteca ya están en tu lista de seguimiento.</string>
+    <string name="updates_remove_confirm">¿Eliminar \"%s\" de la lista de seguimiento?</string>
+    <string name="updates_open_screen">Actualizaciones de novelas</string>
+    <string name="updates_remove">Eliminar de la lista de seguimiento</string>
+
+    <!-- Ajustes de auto-notificacion -->
+    <string name="novel_auto_update_category">Notificaciones</string>
+    <string name="novel_auto_update_enabled_title">Notificaciones de nuevos capítulos</string>
+    <string name="novel_auto_update_enabled_desc">Verificar periódicamente capítulos nuevos de novelas seguidas en segundo plano</string>
+    <string name="novel_auto_update_interval_title">Intervalo de verificación</string>
+    <string name="novel_auto_update_interval_desc">Con qué frecuencia buscar nuevos capítulos</string>
+    <string name="novel_auto_update_interval_8h">Cada 8 horas</string>
+    <string name="novel_auto_update_interval_12h">Cada 12 horas</string>
+    <string name="novel_auto_update_interval_24h">Cada 24 horas</string>
+    <string name="novel_auto_update_interval_current">Actual: cada %1$s horas</string>
+
+    <!-- Canal de notificacion -->
+    <string name="novel_updates_channel_name">Actualizaciones de novelas</string>
+    <string name="novel_updates_channel_desc">Notifica cuando las novelas seguidas tienen capítulos nuevos</string>
+
+    <!-- Contenido de la notificacion -->
+    <string name="novel_updates_notification_title">📚 ¡Nuevos capítulos disponibles!</string>
+    <string name="novel_updates_notification_body_single">%1$s tiene capítulos nuevos</string>
+    <string name="novel_updates_notification_body_multi">%1$d novelas tienen capítulos nuevos</string>
+
+    <!-- Per-novel notification body -->
+    <plurals name="novel_updates_new_chapters">
+        <item quantity="one">%1$d capítulo nuevo disponible</item>
+        <item quantity="other">%1$d capítulos nuevos disponibles</item>
+    </plurals>
+
+    <!-- Filtros para la lista de novelas a verificar estado de actualizacion -->
+    <string name="updates_filter_all">Todas</string>
+    <string name="updates_filter_watching">Seguidas</string>
+    <string name="updates_filter_not_watching">No seguidas</string>
 </resources>

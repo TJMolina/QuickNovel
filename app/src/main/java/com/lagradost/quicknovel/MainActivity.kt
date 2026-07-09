@@ -90,6 +90,8 @@ class MainActivity : AppCompatActivity() {
             private set(value) {
                 _mainActivity = WeakReference(value)
             }
+        /** Extra used by the NovelUpdatesWorker notification to launch the Updates screen. */
+        const val OPEN_UPDATES_EXTRA = "open_novel_updates"
 
         fun loadPreviewPage(searchResponse: SearchResponse) {
             mainActivity?.loadPopup(searchResponse.url, searchResponse.apiName)
@@ -447,6 +449,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
+
+        //open novel updates fragment
+        if (intent.getBooleanExtra(OPEN_UPDATES_EXTRA, false)) {
+            navigate(R.id.navigation_updates)
+            intent.removeExtra(OPEN_UPDATES_EXTRA)
+            return
+        }
+
         if (intent.action == Intent.ACTION_SEND) {
             val extraText = try { // I don't trust android
                 intent.getStringExtra(Intent.EXTRA_TEXT)

@@ -35,6 +35,15 @@ import com.lagradost.quicknovel.ui.img
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
 import kotlinx.coroutines.launch
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.view.isVisible
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import com.lagradost.quicknovel.ui.updates.data.UpdatesManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.withContext
+
 class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
     BindingCreator.Inflate(FragmentDownloadsBinding::inflate)
 ) {
@@ -137,32 +146,15 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
         activity?.fixPaddingStatusbar(binding.downloadRoot)
         //viewModel = ViewModelProviders.of(activity!!).get(DownloadViewModel::class.java)
 
-
-        searchExitIcon =
-            binding.downloadSearch.findViewById(androidx.appcompat.R.id.search_close_btn)
-        searchMagIcon = binding.downloadSearch.findViewById(androidx.appcompat.R.id.search_mag_icon)
-        searchMagIcon.scaleX = 0.65f
-        searchMagIcon.scaleY = 0.65f
-
-        binding.downloadSearch.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String): Boolean {
-                viewModel.search(query)
-                return true
-            }
-
-            override fun onQueryTextChange(newText: String): Boolean {
-                viewModel.search(newText)
-                return true
-            }
-        })
-
-
         val adapter = ViewpagerAdapter(viewModel, this) { isScrollingDown ->
             if (isScrollingDown)
                 binding.downloadFab.shrink()
             else
                 binding.downloadFab.extend()
         }
+
+        binding.viewpager.adapter = adapter
+        //binding.viewpager.reduceDragSensitivity()
 
         observe(viewModel.pages) { pages ->
             adapter.submitList(pages)
@@ -173,24 +165,9 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
             }
         }
 
-        binding.viewpager.adapter = adapter
-        //binding.viewpager.reduceDragSensitivity()
-
         binding.bookmarkTabs.apply {
-            val tabLabels = mutableListOf(this@DownloadFragment.getString(R.string.tab_downloads))
-            for (lib in viewModel.libraries()) {
-                val title = try {
-                    val resId = lib.title.toIntOrNull()
-                    if (resId != null) {
-                        context.getString(resId)
-                    } else {
-                        lib.title
-                    }
-                } catch (e: Exception) {
-                    lib.title
-                }
-                tabLabels.add(title)
-            }
+            val tabLabels = (context?.let { ctx -> listOf(ctx.getString(R.string.tab_downloads)) } ?: emptyList()
+                    ) + viewModel.libraries().map { it.title }
             TabLayoutMediator(this, binding.viewpager) { tab, position ->
                 if(position >= tabLabels.size) return@TabLayoutMediator
                 tab.text = tabLabels[position]
@@ -210,6 +187,25 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
 
             })
         }
+
+        searchExitIcon =
+            binding.downloadSearch.findViewById(androidx.appcompat.R.id.search_close_btn)
+        searchMagIcon = binding.downloadSearch.findViewById(androidx.appcompat.R.id.search_mag_icon)
+        searchMagIcon.scaleX = 0.65f
+        searchMagIcon.scaleY = 0.65f
+
+        binding.downloadSearch.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+            override fun onQueryTextSubmit(query: String): Boolean {
+                viewModel.search(query)
+                return true
+            }
+
+            override fun onQueryTextChange(newText: String): Boolean {
+                viewModel.search(newText)
+                return true
+            }
+        })
+
 
         //sort button
         binding.downloadFab.setOnClickListener { view ->
@@ -256,6 +252,18 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
 
         //swipe_container.setProgressBackgroundColorSchemeColor(requireContext().colorFromAttribute(R.attr.darkBackground))
 
+        //notifications button
+        binding.downloadUpdatesIcon.setOnClickListener {
+            activity.navigate(R.id.navigation_updates)
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                UpdatesManager.updateTick.collectLatest {
+                    updateBellTint()
+                }
+            }
+        }
+
         binding.swipeContainer.apply {
             setColorSchemeColors(context.colorFromAttribute(R.attr.colorPrimary))
             setProgressBackgroundColorSchemeColor(context.colorFromAttribute(R.attr.primaryGrayBackground))
@@ -269,6 +277,7 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
                 }
             }
         }
+
 
         observe(viewModel.isRefreshing) { refreshing ->
             if (refreshing != binding.swipeContainer.isRefreshing) {
@@ -320,5 +329,27 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
             }
         }*/
 
+    }
+    override fun onDestroy() {
+        (binding?.viewpager?.adapter as? ViewpagerAdapter)?.cleanReferences()
+        super.onDestroy()
+    }
+    private fun updateBellTint() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val hasUpdate = withContext(Dispatchers.IO) {
+                UpdatesManager.getWatchList().any { it.hasUpdate }
+            }
+            binding?.apply {
+                context?.let{ ctx ->
+                    if (hasUpdate) {
+                        downloadUpdatesIcon.icon = AppCompatResources.getDrawable(ctx, R.drawable.ic_baseline_notifications_active_24)
+                        downloadUpdatesBadge.isVisible = true
+                    }else {
+                        downloadUpdatesIcon.icon = AppCompatResources.getDrawable(ctx, R.drawable.ic_baseline_notifications_24)
+                        downloadUpdatesBadge.isVisible = false
+                    }
+                }
+            }
+        }
     }
 }

@@ -60,6 +60,8 @@ import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.settings.SettingsFragment.Companion.getBasePath
 import com.lagradost.quicknovel.ui.settings.SettingsFragment.Companion.getDefaultDir
+import com.lagradost.quicknovel.ui.updates.data.UpdatesManager
+import com.lagradost.quicknovel.ui.updates.data.WatchEntry
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromName
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromNameOrNull
 import com.lagradost.quicknovel.util.AppUtils.textToHtmlChapter
@@ -842,7 +844,7 @@ object BookDownloader2Helper {
                     fileName.nameWithoutExtension.toIntOrNull() ?: return@mapNotNull null
                 }?.filter { x -> x >= start }?.sorted()
 
-                chapters?.pmap { threadIndex ->
+                chapters?.map { threadIndex ->
 
                     val filepath =
                         head + getFilename(
@@ -852,7 +854,7 @@ object BookDownloader2Helper {
                             threadIndex
                         )
                     val chap = getChapter(filepath, threadIndex, stripHtml, stripAuthorNotes)
-                        ?: return@pmap null
+                        ?: return@map null
                     Triple(
                         Resource(
                             "id$threadIndex",
@@ -891,46 +893,44 @@ object BookDownloader2Helper {
 }
 
 object NotificationHelper {
-    const val CHANNEL_ID = "epubdownloader.general"
-    const val CHANNEL_NAME = "Downloads"
-    const val CHANNEL_DESCRIPT = "The download notification channel"
-    private var hasCreatedNotChanel = false
+    const val DOWNLOAD_CHANNEL_ID = "epubdownloader.general"
+    const val UPDATES_CHANNEL_ID = "novel_updates_channel"
+
+    private var hasCreatedChannels = false
 
     fun ComponentActivity.requestNotifications() {
         // Ask for notification permissions on Android 13
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(
-                this,
-                POST_NOTIFICATIONS
-            ) != PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(this, POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             val requestPermissionLauncher = this.registerForActivityResult(
                 ActivityResultContracts.RequestPermission()
-            ) { isGranted: Boolean ->
-                println("Notification permission: $isGranted")
-            }
-            requestPermissionLauncher.launch(
-                POST_NOTIFICATIONS
-            )
+            ) { isGranted -> println("Notification permission: $isGranted") }
+            requestPermissionLauncher.launch(POST_NOTIFICATIONS)
         }
     }
 
-    private fun Context.createNotificationChannel() {
-        hasCreatedNotChanel = true
-        // Create the NotificationChannel, but only on API 26+ because
-        // the NotificationChannel class is new and not in the support library
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = CHANNEL_NAME //getString(R.string.channel_name)
-            val descriptionText = CHANNEL_DESCRIPT//getString(R.string.channel_description)
-            val importance = NotificationManager.IMPORTANCE_DEFAULT
-            val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
-                description = descriptionText
-            }
-            // Register the channel with the system
-            val notificationManager: NotificationManager =
-                this.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
-        }
+    fun createAllNotificationChannels(context: Context) {
+        if (hasCreatedChannels || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val channels = listOf(
+            NotificationChannel(
+                DOWNLOAD_CHANNEL_ID,
+                "Downloads",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply { description = "The download notification channel" },
+
+            NotificationChannel(
+                UPDATES_CHANNEL_ID,
+                "Novel Updates",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply { description = "Notifications for new chapters" }
+        )
+
+        notificationManager.createNotificationChannels(channels)
+        hasCreatedChannels = true
     }
 
     fun etaToString(etaMs: Long?): String {
@@ -939,13 +939,18 @@ object NotificationHelper {
         val hours: Int = eta / 3600
         val minutes: Int = (eta % 3600) / 60
         val seconds: Int = eta % 60
-        var timeformat = String.format("%02d h %02d min %02d s", hours, minutes, seconds)
-        if (minutes <= 0 && hours <= 0) {
-            timeformat = String.format("%02d s", seconds)
-        } else if (hours <= 0) {
-            timeformat = String.format("%02d min %02d s", minutes, seconds)
+        return when {
+            hours > 0 -> String.format("%02d h %02d min %02d s", hours, minutes, seconds)
+            minutes > 0 -> String.format("%02d min %02d s", minutes, seconds)
+            else -> String.format("%02d s", seconds)
         }
-        return timeformat
+    }
+
+    suspend fun getLargeIcon(context: Context, url: String?): Bitmap? {
+        if (url == null) return null
+        return try {
+            context.getImageBitmapFromUrl(url)
+        } catch (e: Exception) { null }
     }
 
     suspend fun createNotification(
@@ -960,22 +965,23 @@ object NotificationHelper {
         isStreamNovel: Boolean = true,
     ) {
         if (context == null) return
+        createAllNotificationChannels(context)
+
         val state = stateProgressState.state
-        val timeFormat = if (state == DownloadState.IsDownloading) etaToString(
-            stateProgressState.etaMs
-        ) else ""
+        val timeFormat = if (state == DownloadState.IsDownloading) etaToString(stateProgressState.etaMs) else ""
+
 
         val intent = Intent(context, MainActivity::class.java).apply {
             data = source?.toUri()
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
 
-        val pendingIntent: PendingIntent = PendingIntent.getActivity(
+        val pendingIntent = PendingIntent.getActivity(
             context, 0, intent,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
         )
 
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, DOWNLOAD_CHANNEL_ID)
             .setAutoCancel(true)
             .setColorized(true)
             .setOnlyAlertOnce(true)
@@ -983,7 +989,12 @@ object NotificationHelper {
             .setColor(context.colorFromAttribute(R.attr.colorPrimary))
             .setContentTitle(name)
             .setContentIntent(pendingIntent)
-
+            .setSmallIcon(when (state) {
+                DownloadState.IsDone -> R.drawable.rddone
+                DownloadState.IsDownloading -> R.drawable.rdload
+                DownloadState.IsPaused -> R.drawable.rdpause
+                else -> R.drawable.rderror
+            })
 
         val extraText = if (stateProgressState.total > 1) {
             val unit = if (progressInBytes) "Kb" else ""
@@ -1005,15 +1016,6 @@ object NotificationHelper {
         }
         builder.setContentText(statusText)
 
-        builder.setSmallIcon(
-            when (state) {
-                DownloadState.IsDone -> R.drawable.rddone
-                DownloadState.IsDownloading -> R.drawable.rdload
-                DownloadState.IsPaused -> R.drawable.rdpause
-                else -> R.drawable.rderror
-            }
-        )
-
 
         if (state == DownloadState.IsDownloading || state == DownloadState.IsPaused) {
             builder.setProgress(
@@ -1024,10 +1026,7 @@ object NotificationHelper {
             if (timeFormat.isNotEmpty()) builder.setSubText("$timeFormat remaining")
         }
 
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && posterUrl != null) {
-            context.getImageBitmapFromUrl(posterUrl)?.let { builder.setLargeIcon(it) }
-        }
+        getLargeIcon(context, posterUrl)?.let { builder.setLargeIcon(it) }
 
 
         if (isActionable && (state == DownloadState.IsDownloading || state == DownloadState.IsPaused)) {
@@ -1058,10 +1057,6 @@ object NotificationHelper {
                     )
                 )
             }
-        }
-
-        if (!hasCreatedNotChanel) {
-            context.createNotificationChannel()
         }
 
         with(NotificationManagerCompat.from(context)) {
@@ -1309,39 +1304,66 @@ object BookDownloader2 {
 
 
     private val getNewTotalChaptersSemaphore = Semaphore(5)
-    suspend fun getNewTotalChapters(cached: ResultCached)
-    {
-        getNewTotalChaptersSemaphore.withPermit {
-            try
-            {
-                val api = getApiFromNameOrNull(cached.apiName) ?: return@withPermit
-                val response = api.load(cached.source, true)
 
-                if (response !is com.lagradost.quicknovel.mvvm.Resource.Success) return@withPermit
-                val loaded = response.value as? StreamResponse ?: return@withPermit
+    /**
+     * This search for new chapters of a specific novel in library
+     */
+    suspend fun getNewTotalChapters(cached: ResultCached, allowCache: Boolean = true): ResultCached? {
+        return getNewTotalChaptersSemaphore.withPermit {
+            try {
+                val api = getApiFromNameOrNull(cached.apiName) ?: return@withPermit null
+                val response = api.load(cached.source, allowCache)
+                val now = System.currentTimeMillis()
 
-                val totalChapters = loaded.data.size
-                if(totalChapters == cached.totalChapters) return@withPermit
-
-                setKey(
-                    RESULT_BOOKMARK,
-                    cached.id.toString(),
-                    cached.copy(
-                        totalChapters = totalChapters,
-                    )
-                )
-
-                val newId = generateId(loaded, cached.apiName)
-                if(cached.id != newId){
-                    migrationNovelMutex.withLock {
-                        migrateKeys(cached.id,
-                            newId,
-                            cached.name,
-                            loaded.name)
+                if (response !is com.lagradost.quicknovel.mvvm.Resource.Success) {
+                    UpdatesManager.getEntry( cached.id)?.let {
+                        UpdatesManager.saveEntry(it.copy(checkFailed = true, lastCheckedMs = now))
                     }
+                    return@withPermit null
                 }
+
+                val loaded = response.value as? StreamResponse ?: return@withPermit null
+                val totalChapters = loaded.data.size
+                val newId = generateId(loaded, cached.apiName)
+                var finalCached = cached.copy(totalChapters = totalChapters)
+
+                if (cached.id != newId) {
+                    migrationNovelMutex.withLock {
+                        migrateKeys(cached.id, newId, cached.name, loaded.name)
+                    }
+                    finalCached = finalCached.copy(id = newId)
+                    UpdatesManager.removeFromWatchList(cached.id)
+                }
+                setKey(RESULT_BOOKMARK, finalCached.id.toString(), finalCached)
+                val watchEntry = UpdatesManager.getEntry(finalCached.id)
+                    ?: UpdatesManager.getEntry(cached.id)
+
+                val oldTotal = watchEntry?.lastCheckedChapters ?: cached.totalChapters
+                val hasNewChapters = totalChapters > oldTotal
+
+                if (hasNewChapters || watchEntry != null) {
+                    val updatedWatch = when {
+                        watchEntry != null -> watchEntry.copy(
+                            novelId = finalCached.id,
+                            lastCheckedChapters = totalChapters,
+                            lastCheckedMs = now,
+                            checkFailed = false
+                        )
+                        else -> WatchEntry.fromCached(finalCached).copy(
+                            isPermanent = false,
+                            baselineChapters = oldTotal,
+                            lastCheckedChapters = totalChapters,
+                            lastCheckedMs = now
+                        )
+                    }
+                    UpdatesManager.saveEntry(updatedWatch)
+                    UpdatesManager.remoteCheking(now)
+                }
+
+                return@withPermit finalCached
             } catch (e: Throwable) {
                 if (e !is CancellationException) logError(e)
+                return@withPermit null
             }
         }
     }

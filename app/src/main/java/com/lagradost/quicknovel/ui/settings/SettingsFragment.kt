@@ -14,6 +14,7 @@ import androidx.core.net.toUri
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
+import androidx.preference.SwitchPreference
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.lagradost.quicknovel.APIRepository.Companion.providersActive
 import com.lagradost.quicknovel.CommonActivity
@@ -51,6 +52,7 @@ import java.lang.System.currentTimeMillis
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.lagradost.quicknovel.ui.updates.services.NovelAutoUpdateScheduler
 
 class SettingsFragment : PreferenceFragmentCompat() {
     private fun PreferenceFragmentCompat?.getPref(id: Int): Preference? {
@@ -538,6 +540,44 @@ class SettingsFragment : PreferenceFragmentCompat() {
             }
             return@setOnPreferenceClickListener true
         }
+
+        findPreference<SwitchPreference>(getString(R.string.novel_auto_update_enabled_key))
+            ?.setOnPreferenceChangeListener { _, newValue ->
+                val enabled = newValue as Boolean
+                NovelAutoUpdateScheduler.setEnabled(requireContext(), enabled)
+                findPreference<Preference>(getString(R.string.novel_auto_update_interval_key))
+                    ?.isEnabled = enabled
+                true
+            }
+
+        getPref(R.string.novel_auto_update_interval_key)?.let { pref ->
+            val ctx = requireContext()
+            pref.isEnabled = NovelAutoUpdateScheduler.isEnabled(ctx)
+            val currentH = NovelAutoUpdateScheduler.currentInterval(ctx)
+            pref.summary = ctx.getString(R.string.novel_auto_update_interval_current, currentH.toString())
+
+            pref.setOnPreferenceClickListener {
+                val options = listOf(
+                    getString(R.string.novel_auto_update_interval_8h),
+                    getString(R.string.novel_auto_update_interval_12h),
+                    getString(R.string.novel_auto_update_interval_24h),
+                )
+                val hours = NovelAutoUpdateScheduler.INTERVAL_OPTIONS
+                activity?.showBottomDialog(
+                    options,
+                    hours.indexOf(currentH).coerceAtLeast(0),
+                    getString(R.string.novel_auto_update_interval_title),
+                    false, {},
+                ) { idx ->
+                    val h = hours[idx]
+                    NovelAutoUpdateScheduler.setInterval(requireContext(), h)
+                    pref.summary = getString(R.string.novel_auto_update_interval_current, h.toString())
+                }
+                true
+            }
+        }
+
+
 
         /*getPref(R.string.theme_key)?.setOnPreferenceClickListener {
             val prefNames = resources.getStringArray(R.array.themes_names)

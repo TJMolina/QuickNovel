@@ -349,9 +349,10 @@ fun Context.reassignLibraryBookmarks(sourceId: Int, targetId: Int = 0) {
         }
     }
 }
+
 /**
- * Merge books from a backup.
- * **/
+ * Merge libraries from backup.
+ */
 fun Context.mergeLibraries(backupJson: String) {
     try {
         val currentLibs = getLibraries().toMutableList()

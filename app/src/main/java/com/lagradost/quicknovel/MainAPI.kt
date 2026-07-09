@@ -8,7 +8,7 @@ import com.lagradost.quicknovel.MainActivity.Companion.app
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.ui.UiImage
 import com.lagradost.quicknovel.ui.img
-import com.lagradost.quicknovel.util.DefaultImagesHeaders
+import com.lagradost.quicknovel.util.CommonHeaders
 import kotlinx.coroutines.sync.Mutex
 import org.jsoup.Jsoup
 
@@ -25,7 +25,7 @@ abstract class MainAPI {
     val app get() = if(!usesCloudFlareKiller) MainActivity.app else MainActivity.appWithInterceptor
 
     fun fixPosterHeaders(headers: Map<String, String>?): Map<String, String>? {
-        return if (usesCloudFlareKiller) (headers ?: emptyMap()) + DefaultImagesHeaders.useCloudflareKillerHeader else headers
+        return if (usesCloudFlareKiller) (headers ?: emptyMap()) + CommonHeaders.useCloudflareKillerHeader else headers
     }
 
     open val rateLimitTime: Long = 0

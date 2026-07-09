@@ -17,7 +17,7 @@ import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.setStatus
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
-import com.lagradost.quicknovel.MainActivity.Companion.app
+import com.lagradost.quicknovel.util.CommonHeaders.ajaxHeaders
 
 class NovelLightProvider:  MainAPI() {
     override val name = "Novel Light"
@@ -27,14 +27,6 @@ class NovelLightProvider:  MainAPI() {
     override val iconBackgroundId = R.color.novelightColor
     override val hasMainPage = true
 
-    fun baseHeaders(url:String = "") =
-        if(url.isNotEmpty())
-            mapOf(
-                "X-Requested-With" to "XMLHttpRequest",
-                "Referer" to url,
-                "Accept" to "application/json, text/javascript, */*; q=0.01"
-            )
-    else emptyMap()
     override suspend fun loadMainPage(
         page: Int,
         mainCategory: String?,
@@ -69,7 +61,7 @@ class NovelLightProvider:  MainAPI() {
             ?.substringAfter("const BOOK_ID = \"")
             ?.substringBefore("\"") ?: return emptyList()
         val url = "$mainUrl/book/ajax/chapter-pagination?csrfmiddlewaretoken=$csrfToken&book_id=$bookId&page=1&pagination=0"
-        val response = app.get(url, headers = baseHeaders(url)).parsed<ChapterResponse>()
+        val response = app.get(url, headers = ajaxHeaders(url)).parsed<ChapterResponse>()
         val document = Jsoup.parse(response.html)
        return document.select("a").mapNotNull { li ->
             if(li.selectFirst("span.cost") != null) return@mapNotNull null
@@ -109,7 +101,7 @@ class NovelLightProvider:  MainAPI() {
     override suspend fun loadHtml(url: String): String {
         val jsonResponse = app.get(
             url = ajaxUrl + "/${url.substringAfterLast("/book/chapter/")}",
-            headers = baseHeaders(url),
+            headers = ajaxHeaders(url),
         ).parsed<LoadHtmlResponse>()
         return jsonResponse.content
     }

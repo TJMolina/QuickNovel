@@ -46,7 +46,6 @@ import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
 import com.lagradost.quicknovel.BaseApplication.Companion.context
 import com.lagradost.quicknovel.CommonActivity
 import com.lagradost.quicknovel.CommonActivity.showToast
-import com.lagradost.quicknovel.QuickBook
 import com.lagradost.quicknovel.ui.UiImage
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.databinding.ImageLayoutBinding
@@ -149,7 +148,7 @@ object UIHelper {
             imageView.setImageDrawable(drawable)
         } ?: kotlin.run {
             if(requireCloudFlare){
-                imageView.setImage(url, headers = mapOf(DefaultImagesHeaders.useCloudflareKillerHeader))
+                imageView.setImage(url, headers = mapOf(CommonHeaders.useCloudflareKillerHeader))
             }
             else{
                 imageView.setImage(url)

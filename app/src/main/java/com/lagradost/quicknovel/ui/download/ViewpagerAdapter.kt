@@ -6,8 +6,10 @@ import android.os.Bundle
 import android.os.Parcelable
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.core.view.doOnAttach
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.lagradost.quicknovel.databinding.ViewpagerPageBinding
 import com.lagradost.quicknovel.ui.BaseAdapter
 import com.lagradost.quicknovel.ui.BaseDiffCallback
@@ -56,7 +58,7 @@ class ViewpagerAdapter(
             a.title == b.title
         },
         contentSame = { a, b ->
-            a.items == b.items && a.title == b.title
+            a.items == b.items //&& a.title == b.title
         }
     )) {
 
@@ -94,6 +96,12 @@ class ViewpagerAdapter(
 
 
     val collectionsOfRecyclerView = mutableMapOf<Int, WeakReference<AutofitRecyclerView>>()
+    private var currentScrollListener: RecyclerView.OnScrollListener? = null
+    fun cleanReferences(){
+        currentScrollListener = null
+        collectionsOfRecyclerView.clear()
+    }
+
     fun updateProgressOfPage(tab: Int) {
         val rv = collectionsOfRecyclerView[tab]?.get() ?: return
         val ad = rv.adapter as? AnyAdapter ?: return
@@ -122,35 +130,50 @@ class ViewpagerAdapter(
 
         binding.pageRecyclerview.tag = position
         binding.pageRecyclerview.apply {
-            val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-            val compactView = context.getDownloadIsCompact()
-            spanCount = if (isLandscape) (if (compactView) 2 else 6) else (if (compactView) 1 else 3)
+            val compactView = binding.root.context.getDownloadIsCompact()
 
+            val spanCountLandscape = if (compactView) 2 else 6
+            val spanCountPortrait = if (compactView) 1 else 3
+            val orientation = resources.configuration.orientation
+
+            spanCount = if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                spanCountLandscape
+            } else {
+                spanCountPortrait
+            }
 
             if (adapter == null) { //  || rebind
                 // Only add the items after it has been attached since the items rely on ItemWidth
                 // Which is only determined after the recyclerview is attached.
                 // If this fails then item height becomes 0 when there is only one item
-                val anyAdapter = AnyAdapter(this, downloadViewModel)
-                anyAdapter.headers = if(position == 0) 1 else 0
-                setRecycledViewPool(AnyAdapter.sharedPool)
-                post {
-                    adapter = anyAdapter
-                    collectionsOfRecyclerView[position] = WeakReference(this)
-                    anyAdapter.submitList(item.items)
-                }
-            } else {
-                (adapter as? AnyAdapter)?.submitList(item.items)
-            }
-            clearOnScrollListeners()
-            addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
-                override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
-                    super.onScrolled(recyclerView, dx, dy)
-                    if (dy != 0) {
-                        scrollCallback.invoke(dy > 0)
+                doOnAttach {
+                    setRecycledViewPool(AnyAdapter.sharedPool)
+                    adapter = AnyAdapter(this, downloadViewModel)
+                    .apply {
+                        headers = if(position == 0) 1 else 0
+                        collectionsOfRecyclerView[position] = WeakReference(binding.pageRecyclerview)
+                        submitList(item.items)
                     }
                 }
-            })
+            } else {
+                if(!collectionsOfRecyclerView.containsKey(position)){
+                    collectionsOfRecyclerView[position] = WeakReference(binding.pageRecyclerview)
+                }
+                (adapter as? AnyAdapter)?.apply {
+                    headers = if(position == 0) 1 else 0
+                    submitList(item.items)
+                }
+                // scrollToPosition(0)
+            }
+            currentScrollListener?.let { csl ->
+                removeOnScrollListener(csl)
+            }
+            currentScrollListener = object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    if (dy != 0) scrollCallback.invoke(dy > 0)
+                }
+            }
+            addOnScrollListener(currentScrollListener!!)
         }
     }
 }

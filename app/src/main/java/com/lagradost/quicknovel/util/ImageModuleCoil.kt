@@ -27,7 +27,7 @@ import com.lagradost.nicehttp.ignoreAllSSLErrors
 import com.lagradost.quicknovel.BuildConfig
 import com.lagradost.quicknovel.network.CloudflareKiller
 import com.lagradost.quicknovel.ui.UiImage
-import com.lagradost.quicknovel.util.DefaultImagesHeaders
+import com.lagradost.quicknovel.util.CommonHeaders
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -48,12 +48,12 @@ class DynamicInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
 
-        val useCloudflare = request.header(DefaultImagesHeaders.useCloudflareKillerHeader.first) == "true"
-        val useIgnore500 = request.header(DefaultImagesHeaders.useIgnore500Header.first) == "true"
+        val useCloudflare = request.header(CommonHeaders.useCloudflareKillerHeader.first) == "true"
+        val useIgnore500 = request.header(CommonHeaders.useIgnore500Header.first) == "true"
 
         val cleanRequest = request.newBuilder()
-            .removeHeader(DefaultImagesHeaders.useCloudflareKillerHeader.first)
-            .removeHeader(DefaultImagesHeaders.useIgnore500Header.first)
+            .removeHeader(CommonHeaders.useCloudflareKillerHeader.first)
+            .removeHeader(CommonHeaders.useIgnore500Header.first)
             .build()
 
         val response = if (useCloudflare) {

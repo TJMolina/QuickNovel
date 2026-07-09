@@ -164,7 +164,7 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
             ID_REFRESH_READINGPROGRESS ->{
                 val currentTab = this.workerParams.inputData.getInt(CURRENT_TAB, 1)
                 viewModel?.setIsLoading(true, currentTab)
-                BookDownloader2.getOldDataReadingProgress(currentTab)
+                BookDownloader2.refreshNovelTotalChapters(currentTab)
                 viewModel?.setIsLoading(false, currentTab)
             }
 

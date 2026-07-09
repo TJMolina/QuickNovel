@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
 import android.widget.LinearLayout
+import androidx.core.view.doOnAttach
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import com.lagradost.quicknovel.BaseApplication.Companion.getKey
@@ -118,16 +119,45 @@ class AnyAdapter(
                     setOnClickListener {
                         downloadViewModel.importEpub()
                     }
+                    /*
                     val coverHeight: Int = (resView.itemWidth / 0.68).roundToInt()
                     layoutParams = LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         coverHeight
-                    )
+                    )*/
+                    doOnAttach {
+                        val coverHeight: Int = (resView.itemWidth / 0.68).roundToInt()
+                        layoutParams = LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            coverHeight
+                        )
+                    }
                 }
             }
         }
     }
+    override fun onUpdateContent(holder: ViewHolderState<Any>, item: Any, position: Int) {
+        val view = holder.view
+        if (item is DownloadFragment.DownloadDataLoaded && view is DownloadResultCompactBinding) {
+            view.downloadProgressText.text = "${item.downloadedCount}/${item.downloadedTotal}" + if (item.ETA == "") "" else " - ${item.ETA}"
 
+            view.downloadProgressbar.isIndeterminate = item.generating
+            view.downloadProgressbar.progress = item.downloadedCount.toInt() * 100
+            view.downloadProgressbar.isVisible = item.generating || (item.downloadedCount < item.downloadedTotal)
+
+            view.downloadUpdate.setImageResource(
+                when (item.state) {
+                    DownloadState.IsDownloading -> R.drawable.ic_baseline_pause_24
+                    DownloadState.IsPaused -> R.drawable.netflix_play
+                    DownloadState.IsDone -> R.drawable.ic_baseline_check_24
+                    else -> R.drawable.ic_baseline_autorenew_24
+                }
+            )
+            view.downloadUpdateLoading.isVisible = item.state == DownloadState.IsPending
+        } else {
+            super.onUpdateContent(holder, item, position)
+        }
+    }
     override fun onCreateCustomContent(parent: ViewGroup, viewType: Int): ViewHolderState<Any> {
         val compact = parent.context.getDownloadIsCompact()
         val binding = when (viewType) {
@@ -207,11 +237,27 @@ class AnyAdapter(
                     is DownloadFragment.DownloadDataLoaded -> {
                         view.apply {
                             backgroundCard.apply {
+                                /*
                                 val coverHeight: Int = (resView.itemWidth / 0.68).roundToInt()
                                 layoutParams = LinearLayout.LayoutParams(
                                     ViewGroup.LayoutParams.MATCH_PARENT,
                                     coverHeight
-                                )
+                                )*/
+
+
+                                doOnAttach {
+                                    val coverHeight: Int = (resView.itemWidth / 0.68).roundToInt()
+                                    layoutParams = LinearLayout.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        coverHeight
+                                    )
+                                    //this fix visual bugs
+                                    post {
+                                        //this is really cost at init
+                                        imageView.setImage(item.image)
+                                    }
+                                }
+
                                 setOnClickListener {
                                     if (item.apiName == IMPORT_SOURCE_PDF && item.downloadedCount < item.downloadedTotal) {
                                         preloadPartialImportedPdf(item, context)
@@ -226,6 +272,7 @@ class AnyAdapter(
                                     downloadViewModel.showMetadata(item)
                                     return@setOnLongClickListener true
                                 }
+
                             }
 
                             downloadProgressbarIndeterment.isVisible = item.generating
@@ -244,7 +291,6 @@ class AnyAdapter(
                             imageText.text = item.name
 
                             imageView.alpha = if (isAPdfDownloading) 0.6f else 1.0f
-                            imageView.setImage(item.image)
 
                             progressReading.isVisible = false
                         }
@@ -253,11 +299,24 @@ class AnyAdapter(
                     is ResultCached -> {
                         view.apply {
                             backgroundCard.apply {
+                                /*
                                 val coverHeight: Int = (resView.itemWidth / 0.68).roundToInt()
                                 layoutParams = LinearLayout.LayoutParams(
                                     ViewGroup.LayoutParams.MATCH_PARENT,
                                     coverHeight
-                                )
+                                )*/
+                                doOnAttach {
+                                    val coverHeight: Int = (resView.itemWidth / 0.68).roundToInt()
+                                    layoutParams = LinearLayout.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        coverHeight
+                                    )
+                                    //this fix visual bugs
+                                    post {
+                                        //this is really cost at init
+                                        imageView.setImage(item.image)
+                                    }
+                                }
                                 setOnClickListener {
                                     downloadViewModel.load(item)
                                 }
@@ -267,9 +326,6 @@ class AnyAdapter(
                                     return@setOnLongClickListener true
                                 }
                             }
-                            imageView.setImage(
-                                item.image,
-                            ) // skipCache = false
 
                             imageText.text = item.name
                             imageTextMore.isVisible = false

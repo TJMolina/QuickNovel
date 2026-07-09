@@ -63,7 +63,7 @@ class LibrarySectionAdapter(
     })
 
     fun moveItemVisual(fromPosition: Int, toPosition: Int) {
-        val currentItems = immutableCurrentList
+        val currentItems = immutableCurrentList.toMutableList()
         //Do not replace the position of None
         if (fromPosition <= 0 || toPosition <= 0) return
         //This could all be done in a single if, but using three makes it clearer

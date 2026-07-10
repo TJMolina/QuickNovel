@@ -19,7 +19,7 @@ import com.lagradost.quicknovel.setStatus
 import org.jsoup.Jsoup
 import kotlin.math.roundToInt
 
-class NovelFireProvider:  MainAPI() {
+open class NovelFireProvider:  MainAPI() {
     override val name = "NovelFire"
     override val mainUrl = "https://novelfire.net"
     override val iconId = R.drawable.icon_novelfire
@@ -175,7 +175,7 @@ class NovelFireProvider:  MainAPI() {
         }
     }
 
-    suspend fun getChapters(url: String): List<ChapterData> {
+    open suspend fun getChapters(url: String): List<ChapterData> {
         val bookId = url.substringAfterLast("/book/").substringBefore("?").substringBefore("/")
         val firstPageUrl = "$mainUrl/book/$bookId/chapters?page=1"
         val document = app.get(firstPageUrl).document

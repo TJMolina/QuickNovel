@@ -20,7 +20,10 @@ import java.util.Collections
 class LibrarySectionAdapter(
     private var selectedIndex: Int,
     private val onDragFinished: (List<DefaultLibrary>) -> Unit,
-    private val onItemClick: (Int) -> Unit
+    private val onItemClick: (Int) -> Unit,
+    private val onRename: (DefaultLibrary, LibrarySectionAdapter) -> Unit,
+    private val onDelete: (DefaultLibrary, LibrarySectionAdapter) -> Any,
+    private val onMerge: (DefaultLibrary, LibrarySectionAdapter) -> Any,
 ) : NoStateAdapter<DefaultLibrary>(
     diffCallback = BaseDiffCallback(
         itemSame = { a, b -> a.id == b.id },
@@ -121,9 +124,7 @@ class LibrarySectionAdapter(
         binding.libraryTitle.setOnClickListener {
             //Decide what happens when I click on the library name
             if (isEditing && !isSpecial) {
-                LibraryManager.showRenameDialog(context, item) {
-                    LibraryManager.refreshList(context, this)
-                }
+                onRename(item, this@LibrarySectionAdapter)
             } else {
                 onItemClick(position)
             }
@@ -136,8 +137,8 @@ class LibrarySectionAdapter(
                 )
             ){
                 when(itemId){
-                    1 -> LibraryManager.showMergeDialog(context, item, this@LibrarySectionAdapter)
-                    2 -> LibraryManager.showDeleteDialog(context, item, this@LibrarySectionAdapter)
+                    1 -> onMerge(item, this@LibrarySectionAdapter)
+                    2 -> onDelete(item, this@LibrarySectionAdapter)
                 }
             }
         }

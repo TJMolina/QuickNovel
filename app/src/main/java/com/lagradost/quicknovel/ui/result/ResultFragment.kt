@@ -589,6 +589,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                     context,
                     allOptions,
                     selectedIndex = selectedIndex,
+                    {},
                     context.getString(R.string.bookmark)
                 ) { selected ->
                     if (selected == 0) {

@@ -39,8 +39,11 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import com.lagradost.quicknovel.DefaultLibrary
+import com.lagradost.quicknovel.MainActivity
 import com.lagradost.quicknovel.ui.updates.data.UpdatesManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
 
@@ -48,7 +51,6 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
     BindingCreator.Inflate(FragmentDownloadsBinding::inflate)
 ) {
     private val viewModel: DownloadViewModel by viewModels()
-
     data class DownloadData(
         @JsonProperty("source")
         val source: String,
@@ -139,6 +141,20 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
 
     lateinit var searchExitIcon: ImageView
     lateinit var searchMagIcon: ImageView
+    private var mediator: TabLayoutMediator? = null
+    //This function is called every time pages.submitList is invoked to update a tab's name or state
+    private fun updateTabs(libraries: List<DefaultLibrary>) {
+        val binding = binding ?: return
+        val context = context ?: return
+
+        val tabLabels = listOf(context.getString(R.string.tab_downloads)) + libraries.map { it.title }
+        mediator?.detach()
+        mediator = TabLayoutMediator(binding.bookmarkTabs, binding.viewpager) { tab, position ->
+            if (position < tabLabels.size) {
+                tab.text = tabLabels[position]
+            }
+        }.apply { attach() }
+    }
 
     override fun onBindingCreated(binding: FragmentDownloadsBinding) {
         viewModel.loadAllData(true)
@@ -163,28 +179,18 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
                     binding.viewpager.setCurrentItem(it, false)
                 }
             }
+
+            updateTabs(viewModel.libraries)
         }
 
         binding.bookmarkTabs.apply {
-            val tabLabels = (context?.let { ctx -> listOf(ctx.getString(R.string.tab_downloads)) } ?: emptyList()
-                    ) + viewModel.libraries().map { it.title }
-            TabLayoutMediator(this, binding.viewpager) { tab, position ->
-                if(position >= tabLabels.size) return@TabLayoutMediator
-                tab.text = tabLabels[position]
-            }.attach()
-
             addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
                 override fun onTabSelected(tab: TabLayout.Tab?) {
                     //binding.swipeContainer.isEnabled = binding.bookmarkTabs.selectedTabPosition == 0
                     viewModel.switchPage(binding.bookmarkTabs.selectedTabPosition)
                 }
-
-                override fun onTabUnselected(tab: TabLayout.Tab?) {
-                }
-
-                override fun onTabReselected(tab: TabLayout.Tab?) {
-                }
-
+                override fun onTabUnselected(tab: TabLayout.Tab?) {}
+                override fun onTabReselected(tab: TabLayout.Tab?) {}
             })
         }
 

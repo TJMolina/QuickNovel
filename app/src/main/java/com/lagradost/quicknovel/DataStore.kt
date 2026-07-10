@@ -9,7 +9,9 @@ import com.fasterxml.jackson.module.kotlin.KotlinFeature
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.lagradost.quicknovel.mvvm.logError
 import androidx.core.content.edit
+import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.util.AppUtils.parseJson
+import com.lagradost.quicknovel.util.AppUtils.toLibraryKey
 
 const val PREFERENCES_NAME: String = "rebuild_preference"
 const val DOWNLOAD_FOLDER: String = "downloads_data"
@@ -254,7 +256,11 @@ fun Context.getLibraries(): List<DefaultLibrary> {
     if (stored != null) {
         return stored.map { it }.sortedBy { it.position }
     }
-
+    /*
+    *If stored is null, it means this is the first time the user has opened
+    * the app, so the default libraries are translated into the user's language.
+    * This only happens once
+    * */
     val defaultLibs = DEFAULT_LIBRARIES.map { translateLibrary(it) }
     saveLibraries(defaultLibs)
 
@@ -264,7 +270,7 @@ fun Context.getLibraries(): List<DefaultLibrary> {
 private fun Context.translateLibrary(lib: DefaultLibrary): DefaultLibrary {
     val resId = lib.title.toIntOrNull() ?: return lib
     return try {
-        lib.copy(title = this.getString(resId))
+        lib.copy(title = getString(resId))
     } catch (e: Exception) {
         lib
     }
@@ -284,11 +290,19 @@ fun Context.saveLibraries(libs: List<DefaultLibrary>) {
  * Adds [newLib] to the persisted list.
  * Throws an exception if a library with the same ID already exists.
  */
-fun Context.addLibrary(newLib: DefaultLibrary) {
+fun Context.addLibrary(title:String) {
+    val newKey = title.toLibraryKey()
+    require(title.isNotEmpty() && newKey.isNotEmpty()){getString(R.string.library_error_invalid_name)}
+
     val current = getLibraries().toMutableList()
+    val nextId = (current.maxOfOrNull { it.id } ?: 0) + 1
+    val nextPos = (current.maxOfOrNull { it.position } ?: 0) + 1
+
+    val newLib = DefaultLibrary(nextId, newKey, title, position = nextPos)
     require(current.none { it.id == newLib.id || it.title == newLib.title }) {
         getString(R.string.library_error_exists)
     }
+
     current.add(newLib)
     saveLibraries(current)
 }
@@ -298,13 +312,29 @@ fun Context.addLibrary(newLib: DefaultLibrary) {
  * Respects [DefaultLibrary.editable]: throws an exception if the library is not editable.
  */
 //rename
-fun Context.updateLibrary(updated: DefaultLibrary) {
+fun Context.updateLibrary(library: DefaultLibrary) {
     val current = getLibraries().toMutableList()
-    val index = current.indexOfFirst { it.id == updated.id }
+    val index = current.indexOfFirst { it.id == library.id }
+
     require(index >= 0) { getString(R.string.library_error_not_found) }
-    if (current[index].key != updated.key) {
-        require(current.none { it.key == updated.key }) { getString(R.string.library_error_exists) }
+
+    val oldLibrary = current[index]
+
+    /*Updating the name is special because it also requires updating the key.
+    Updating the position, on the other hand, doesn't require any additional checks*/
+    val updated = if (oldLibrary.title != library.title) {
+        val newKey = library.title.toLibraryKey()
+        require(library.title.isNotEmpty() && newKey.isNotEmpty()) {
+            getString(R.string.library_error_invalid_name)
+        }
+        require(current.none { it.id != library.id && it.key == newKey }) {
+            getString(R.string.library_error_exists)
+        }
+        library.copy(key = newKey)
+    } else {
+        library
     }
+
     current[index] = updated
     saveLibraries(current)
 }
@@ -316,6 +346,8 @@ fun Context.updateLibrary(updated: DefaultLibrary) {
 fun Context.deleteLibrary(id: Int) {
     val current = getLibraries().toMutableList()
     val target = current.find { it.id == id }
+    val inUse = getLibraryBookmarkCount(id)
+    require(inUse == 0) { getString(R.string.library_delete_empty_only_message) }
     require(target != null) { R.string.library_error_not_found }
     require(target.editable) { R.string.library_error_not_editable }
     current.removeAll { it.id == id }

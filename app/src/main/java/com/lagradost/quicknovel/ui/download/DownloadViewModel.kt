@@ -95,7 +95,7 @@ class DownloadViewModel : ViewModel() {
         )
     }
 
-    fun libraries(): List<DefaultLibrary> = context?.getLibraries() ?: DEFAULT_LIBRARIES
+    val libraries get() = context?.getLibraries() ?: DEFAULT_LIBRARIES
 
     var activeQuery: String = ""
     val _pages: MutableLiveData<List<Page>> = MutableLiveData(null)
@@ -368,7 +368,7 @@ class DownloadViewModel : ViewModel() {
 
         val pages = withContext(Dispatchers.IO) {
             if (refreshAll) fetchAllData(false)
-            val libraries = libraries()
+            val libraries = libraries
             //this will save all novels data
             val mapping = LinkedHashMap<Int, MutableList<ResultCached>>()
             //separate by specific library
@@ -427,6 +427,7 @@ class DownloadViewModel : ViewModel() {
         BookDownloader2.downloadProgressChanged += ::progressChanged
         BookDownloader2.downloadDataRefreshed += ::downloadDataRefreshed
         BookDownloader2.downloadRemoved += ::downloadRemoved
+        MainActivity.loadingPreviewClosed += :: loadAllData
     }
 
     override fun onCleared() {
@@ -435,6 +436,7 @@ class DownloadViewModel : ViewModel() {
         BookDownloader2.downloadDataChanged -= ::progressDataChanged
         BookDownloader2.downloadDataRefreshed -= ::downloadDataRefreshed
         BookDownloader2.downloadRemoved -= ::downloadRemoved
+        MainActivity.loadingPreviewClosed -= :: loadAllData
     }
 
     val activeRefreshTabs = mutableSetOf<Int>()

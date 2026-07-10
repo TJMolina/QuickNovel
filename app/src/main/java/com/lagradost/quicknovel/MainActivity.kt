@@ -65,6 +65,7 @@ import com.lagradost.quicknovel.util.BackupUtils.setUpBackup
 import com.lagradost.quicknovel.util.Coroutines
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.Coroutines.main
+import com.lagradost.quicknovel.util.Event
 import com.lagradost.quicknovel.util.InAppUpdater.Companion.runAutoUpdate
 import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
@@ -101,6 +102,11 @@ class MainActivity : AppCompatActivity() {
             mainActivity?.loadPopup(card)
         }
 
+        /*
+        *This variable is used to rescan the novels' properties and update ui after the
+        * user has made changes to the libraries, such as renaming or deleting them
+        * */
+        val loadingPreviewClosed = Event<Boolean>()
         fun loadPreviewPage(cached: ResultCached) {
             mainActivity?.loadPopup(cached)
         }
@@ -640,7 +646,7 @@ class MainActivity : AppCompatActivity() {
                         downloadDeleteTrashFromResult.setOnClickListener {
                             viewModel.deleteAlert()
                         }
-                        //show bottom dialog with libraries
+                            //show bottom dialog with libraries
                             bookmark.setOnClickListener { view ->
                                 val context = view.context ?: return@setOnClickListener
                                 val libraries = context.getLibraries()
@@ -654,6 +660,7 @@ class MainActivity : AppCompatActivity() {
                                     context,
                                     allOptions,
                                     selectedIndex = selectedIndex,
+                                    {loadingPreviewClosed.invoke(false)},
                                     context.getString(R.string.bookmark)
                                 ) { selected ->
                                     if (selected == 0) {

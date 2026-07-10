@@ -2,17 +2,23 @@ package com.lagradost.quicknovel.providers
 
 import android.net.Uri
 import android.webkit.CookieManager
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.quicknovel.HeadMainPageResponse
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.fixUrl
+import com.lagradost.quicknovel.fixUrlNull
 import com.lagradost.quicknovel.newChapterData
 import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
+import com.lagradost.quicknovel.providers.NovelFireProvider.RelatedResponse
 import com.lagradost.quicknovel.setStatus
+import com.lagradost.quicknovel.util.AppUtils.parseJson
 import com.lagradost.quicknovel.util.CommonHeaders.ajaxHeaders
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 
 
 class FuckNovelPiaProvider :  MainAPI() {
@@ -114,6 +120,39 @@ class FuckNovelPiaProvider :  MainAPI() {
             this.tags = infoDiv.select("div.tags a").mapNotNull {
                 it.text().trim().takeIf { text ->  text.isNotEmpty() }
             }
+            related = getRelated(document)
+        }
+    }
+
+
+    fun getRelated(dc: Document): List<SearchResponse> {
+        return try {
+            val scriptContent = dc.select("script").find { it.data().contains("const seedRows =") }?.data()
+                ?: return emptyList()
+
+            val regex = Regex("""const seedRows\s*=\s*(\[.*?\]);""", RegexOption.DOT_MATCHES_ALL)
+            val jsonMatch = regex.find(scriptContent)?.groupValues?.get(1) ?: return emptyList()
+
+            val rows = parseJson<List<SeedRow>>(jsonMatch)
+
+            rows.map { row ->
+                val title = row.title ?: "Untitled"
+                val href = when {
+                    !row.slug.isNullOrBlank() -> "$mainUrl/novel/${row.slug}"
+                    !row.hash.isNullOrBlank() -> "$mainUrl/novel.php?hash=${row.hash}"
+                    else -> ""
+                }
+
+                newSearchResponse(
+                    name = title,
+                    url = href
+                ) {
+                    posterUrl = row.cover
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
         }
     }
 
@@ -159,4 +198,15 @@ class FuckNovelPiaProvider :  MainAPI() {
 
         }
     }
+
+    data class SeedRow(
+        @JsonProperty("slug")
+        val slug: String?,
+        @JsonProperty("title")
+        val title: String?,
+        @JsonProperty("cover")
+        val cover: String?,
+        @JsonProperty("hash")
+        val hash: String?
+    )
 }

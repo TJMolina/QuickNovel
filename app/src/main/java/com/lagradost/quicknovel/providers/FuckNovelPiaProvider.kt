@@ -25,7 +25,7 @@ class FuckNovelPiaProvider :  MainAPI() {
     override val name = "FuckNovelPia"
     override val mainUrl = "https://fucknovelpia.com"
     override val iconId = R.drawable.icon_fucknovelpia
-    override val rateLimitTime = 1000L
+    override val rateLimitTime = 3000L
 
     override val hasMainPage = true
 

@@ -15,7 +15,7 @@ import com.lagradost.quicknovel.util.translation.models.TranslatorAgent
 import com.lagradost.safefile.closeQuietly
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
+//
 class TranslationManager {
     private val geminiTranslator = GeminiTranslateOnline(
         apiKey = "",

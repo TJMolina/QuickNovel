@@ -1,5 +1,4 @@
 package com.lagradost.quicknovel.util.translation.models
-
 import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 

@@ -80,6 +80,7 @@ import kotlin.math.roundToInt
 import kotlin.properties.Delegates
 import com.google.android.material.tabs.TabLayout
 import com.lagradost.quicknovel.ReadActivityViewModel.MLSettings.Companion.AUTO_LANG
+import com.lagradost.quicknovel.util.translation.models.TranslatorAgent
 
 class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     companion object {
@@ -1334,9 +1335,13 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 }
             }
 
-            binding.readOnlineTranslationSwitch.isChecked = viewModel.mlUseOnlineTransaltion
+            binding.readOnlineTranslationSwitch.isChecked = viewModel.currentAgent != TranslatorAgent.OFFLINE
             binding.readOnlineTranslationSwitch.setOnCheckedChangeListener { _, isChecked ->
-                viewModel.mlUseOnlineTransaltion = isChecked
+                viewModel.mlTranslationAgent = if (isChecked) {
+                    TranslatorAgent.GEMINI.ordinal
+                } else {
+                    TranslatorAgent.OFFLINE.ordinal
+                }
                 //Do not allow automatic detection of the target language; the user should know that themselves (they should know the name of their own language).
                 //It could probably be automated, but I have no idea.
                 if (isChecked == false && viewModel.mlFromLanguage == AUTO_LANG) {
@@ -1349,16 +1354,16 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 if (view == null) return@setOnClickListener
                 val context = view.context
 
-                val items = (
-                    if (!viewModel.mlUseOnlineTransaltion) ReadActivityViewModel.MLSettings.mapList
-                    else ReadActivityViewModel.MLSettings.mapOnlineList
-                )
+                val items = if (viewModel.currentAgent != TranslatorAgent.OFFLINE) {
+                    ReadActivityViewModel.MLSettings.mapOnlineList
+                } else {
+                    ReadActivityViewModel.MLSettings.mapList
+                }
+
 
                 context.showDialog(
-                    items.map { item ->
-                        item.second
-                    },
-                    items.map { item -> item.first }.indexOf(viewModel.mlFromLanguage),
+                    items.map { it.second },
+                    items.map { it.first }.indexOf(viewModel.mlFromLanguage),
                     context.getString(R.string.sleep_timer), false, {}
                 ) { index ->
                     viewModel.mlFromLanguage = items[index].first
@@ -1401,12 +1406,14 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
             val mlSettings = viewModel.mlSettings
 
-            if (mlSettings.isInvalid()) {
-                binding.readMlTitle.setText(R.string.google_translate)
-            } else {
-                binding.readMlTitle.text =
-                    "${binding.readMlTitle.context.getString(R.string.google_translate)} (${mlSettings.fromDisplay} -> ${mlSettings.toDisplay})"
+            val agentName = when(mlSettings.agent) {
+                TranslatorAgent.GEMINI -> "Gemini AI"
+                TranslatorAgent.ONLINE -> "Google Online"
+                else -> getString(R.string.google_translate)
             }
+
+           binding.readMlTitle.text =
+                    "$agentName (${mlSettings.fromDisplay} -> ${mlSettings.toDisplay})"
 
             binding.readLanguage.setOnClickListener { _ ->
                 ioSafe {

@@ -9,15 +9,42 @@ import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
 import com.lagradost.quicknovel.ErrorLoadingException
+import com.lagradost.quicknovel.MainActivity
 import com.lagradost.quicknovel.mvvm.logError
+import com.lagradost.quicknovel.util.translation.models.TranslatorAgent
 import com.lagradost.safefile.closeQuietly
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class TranslationManager {
-    private var translator: Translator? = null
+    private val geminiTranslator = GeminiTranslateOnline(
+        apiKey = "",
+        client = MainActivity.app
+    )
+
+    private val onlineTranslator = GoogleTranslateOnline(MainActivity.app)
+
+    private var translator: Translator? = null // MLKit Offline
     private var currentFrom: String? = null
     private var currentTo: String? = null
+    private var currentAgent: TranslatorAgent = TranslatorAgent.OFFLINE
+
+    /**
+     * Configura los idiomas y el agente activo.
+     */
+    fun setSettings(from: String, to: String, agent: TranslatorAgent) {
+        if (currentFrom != from || currentTo != to || currentAgent != agent) {
+            currentFrom = from
+            currentTo = to
+            currentAgent = agent
+
+            if (agent != TranslatorAgent.OFFLINE) {
+                translator?.closeQuietly()
+                translator = null
+            }
+        }
+    }
+
     suspend fun isModelDownloaded(source: String, target: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val modelManager = RemoteModelManager.getInstance()
@@ -37,13 +64,14 @@ class TranslationManager {
     }
     suspend fun prepareModel(from: String, to: String): Translator? {
         try {
-            // Close previous translator if language pair changed
-            if (currentFrom != from || currentTo != to) {
-                translator?.close()
+            if (translator != null && currentFrom == from && currentTo == to) {
+                return translator
             }
 
-            val sourceTag = TranslateLanguage.fromLanguageTag(from) ?: throw ErrorLoadingException("Language doesn't exist")
-            val targetTag = TranslateLanguage.fromLanguageTag(to) ?: throw ErrorLoadingException("Language doesn't exist")
+            translator?.closeQuietly()
+
+            val sourceTag = TranslateLanguage.fromLanguageTag(from) ?: throw ErrorLoadingException("Language $from doesn't exist")
+            val targetTag = TranslateLanguage.fromLanguageTag(to) ?: throw ErrorLoadingException("Language $to doesn't exist")
 
             val options = TranslatorOptions.Builder()
                 .setSourceLanguage(sourceTag)
@@ -57,8 +85,6 @@ class TranslationManager {
             }
 
             translator = client
-            currentFrom = from
-            currentTo = to
             return translator
         } catch (e: Exception) {
             logError(e)
@@ -68,34 +94,44 @@ class TranslationManager {
 
     suspend fun translate(
         textList: List<String>,
-        from: String,
-        to: String,
-        useOnline: Boolean = false,
         progress: suspend (Int, Int) -> Unit = { _, _ -> },
     ): List<String> {
         if (textList.isEmpty()) return emptyList()
 
-        return if (useOnline)  GoogleTranslateOnline.translate(textList, from, to, progress)
-        else offlineTranslate(textList, from, to, progress)
+        val from = currentFrom ?: throw Exception("Source language not set")
+        val to = currentTo ?: throw Exception("Target language not set")
+
+        return when (currentAgent) {
+            TranslatorAgent.ONLINE -> {
+                val result = onlineTranslator.translate(textList, from, to, progress)
+                onlineTranslator.fixFailures(result, from, to)
+            }
+
+            TranslatorAgent.OFFLINE -> {
+                offlineTranslate(textList, from, to, progress)
+            }
+
+            TranslatorAgent.GEMINI -> {
+                val result = geminiTranslator.translate(textList, from, to, progress)
+                onlineTranslator.fixFailures(result, from, to)
+            }
+        }
     }
+
     private suspend fun offlineTranslate(
         textList: List<String>,
         from: String,
         to: String,
-        progress: suspend (Int, Int) -> Unit = { _, _ -> }): List<String>
-    {
+        progress: suspend (Int, Int) -> Unit
+    ): List<String> {
         val client = translator ?: prepareModel(from, to) ?: throw Exception("Offline model not available")
         return textList.mapIndexed { index, text ->
-            //Translation is resource-intensive, so only translate when the text is not just a set of non-letter characters
             if (!text.trim().any { it.isLetter() }) return@mapIndexed text
-            progress(index, textList.size)
+            progress(index + 1, textList.size)
             Tasks.await(client.translate(text))
         }
     }
 
-    /**
-     * Reset translator
-     * */
     fun release() {
         translator?.closeQuietly()
         translator = null

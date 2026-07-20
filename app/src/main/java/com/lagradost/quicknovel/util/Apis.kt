@@ -26,8 +26,8 @@ import com.lagradost.quicknovel.providers.LibReadProvider
 import com.lagradost.quicknovel.providers.LightNovelTranslationsProvider
 import com.lagradost.quicknovel.providers.LightNovelWorldProvider
 import com.lagradost.quicknovel.providers.LnMTLProvider
+import com.lagradost.quicknovel.providers.LuxonScansProvider
 import com.lagradost.quicknovel.providers.MeioNovelProvider
-import com.lagradost.quicknovel.providers.MoreNovelProvider
 import com.lagradost.quicknovel.providers.MtlNovelProvider
 import com.lagradost.quicknovel.providers.NoBadNovelProvider
 import com.lagradost.quicknovel.providers.NovLoveProvider
@@ -44,6 +44,7 @@ import com.lagradost.quicknovel.providers.NovelsOnlineProvider
 import com.lagradost.quicknovel.providers.PawReadProver
 import com.lagradost.quicknovel.providers.PlanetaEpubProvider
 import com.lagradost.quicknovel.providers.RanobesProvider
+import com.lagradost.quicknovel.providers.RanovelProvider
 import com.lagradost.quicknovel.providers.ReadNovelFullProvider
 import com.lagradost.quicknovel.providers.ReadOnlineFreeBookProvider
 import com.lagradost.quicknovel.providers.ReadfromnetProvider
@@ -89,9 +90,9 @@ class Apis {
             LightNovelWorldProvider(),
             LnoriProvider(),
             LnMTLProvider(),
+            LuxonScansProvider(),
             MeioNovelProvider(),
             //MNovelFreeProvider(), // same as NovelFullVipProvider
-            MoreNovelProvider(),
             MtlNovelProvider(),
             NoBadNovelProvider(),
             NovelasLigerasProvider(),
@@ -109,6 +110,7 @@ class Apis {
             PawReadProver(),
             PlanetaEpubProvider(),
             RanobesProvider(),
+            RanovelProvider(),
             //RanobesProvider(),
             //ReadAnyBookProvider(), // Books locked behind login
             ReadfromnetProvider(),

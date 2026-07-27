@@ -371,15 +371,13 @@ class DownloadViewModel : ViewModel() {
     }
 
     fun loadAllData(refreshAll: Boolean) = viewModelScope.launch {
-
-        val pages = withContext(Dispatchers.IO) {
             if (refreshAll) fetchAllData(false)
-            val libraries = libraries
-            //this will save all novels data
-            val mapping = LinkedHashMap<Int, MutableList<ResultCached>>()
-            //separate by specific library
-            libraries.forEach { lib -> mapping[lib.id] = mutableListOf() }
+            val libs = libraries
 
+            val mapping = LinkedHashMap<Int, ArrayList<ResultCached>>().apply {
+                libs.forEach { lib -> put(lib.id, arrayListOf()) }
+            }
+        withContext(Dispatchers.IO) {
             //get all novel's id saved in libraries
             val keys = getKeys(RESULT_BOOKMARK_STATE) ?: emptyList()
             for (key in keys) {
@@ -391,19 +389,19 @@ class DownloadViewModel : ViewModel() {
                 val cached = getKey<ResultCached>(id) ?: continue
                 mapping[type]?.add(cached)
             }
-
-            val pagesList = mutableListOf<Page>()
-            pagesList.add(getDownloadedCards())
-
-            //sort library
-            for (lib in libraries) {
-                val items = mapping[lib.id] ?: mutableListOf()
-                val sortedItems = sortNormalArray(items)
-                pagesList.add(Page(lib.title, unsortedItems = items, items = sortedItems))
-            }
-            pagesList
         }
-        _pages.value = pages
+
+        val pages = mutableListOf<Page>()
+
+        pages.add(getDownloadedCards())
+
+        for (lib in libs) {
+            val items = mapping[lib.id] ?: arrayListOf()
+            val sortedItems = sortNormalArray(ArrayList(items))
+            pages.add(Page(lib.title, unsortedItems = items, items = sortedItems))
+        }
+
+        _pages.postValue(pages)
     }
 
     private suspend fun getDownloadedCards(): Page {
@@ -433,7 +431,6 @@ class DownloadViewModel : ViewModel() {
         BookDownloader2.downloadProgressChanged += ::progressChanged
         BookDownloader2.downloadDataRefreshed += ::downloadDataRefreshed
         BookDownloader2.downloadRemoved += ::downloadRemoved
-        MainActivity.loadingPreviewClosed += :: loadAllData
     }
 
     override fun onCleared() {
@@ -441,7 +438,6 @@ class DownloadViewModel : ViewModel() {
         BookDownloader2.downloadDataChanged -= ::progressDataChanged
         BookDownloader2.downloadDataRefreshed -= ::downloadDataRefreshed
         BookDownloader2.downloadRemoved -= ::downloadRemoved
-        MainActivity.loadingPreviewClosed -= :: loadAllData
     }
 
     val activeRefreshTabs = mutableSetOf<Int>()

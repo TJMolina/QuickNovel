@@ -66,6 +66,7 @@ import com.lagradost.quicknovel.compose.CloudStreamTheme.colors
 import com.lagradost.quicknovel.compose.circle
 import com.lagradost.quicknovel.compose.ripple
 import com.lagradost.quicknovel.compose.rounded
+import com.lagradost.quicknovel.getLibraries
 import com.lagradost.quicknovel.mvvm.safe
 import com.lagradost.quicknovel.ui.common.HorizontalTab
 import com.lagradost.quicknovel.ui.common.ImmutableChapterData
@@ -88,6 +89,7 @@ import com.lagradost.quicknovel.util.toPx
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 import kotlin.uuid.ExperimentalUuidApi
 
 
@@ -110,9 +112,10 @@ fun ResultScreenImpl(
     // val scrollState = rememberScrollState()
 
 
-    val tabNames = persistentListOf(
-        R.string.novel, R.string.reviews, R.string.related, R.string.chapters
-    )
+    val tabNames = listOf(
+    stringResource(R.string.tab_downloads)
+    ).plus(LocalContext.current.getLibraries().map { it.title })
+    .toPersistentList()
     val pagerState = rememberPagerState(
         initialPage = 0, pageCount = { tabNames.size })
 

@@ -6,21 +6,18 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
-import android.widget.Toast
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.fragment.app.FragmentActivity
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.lagradost.quicknovel.BookDownloader2Helper.checkWrite
 import com.lagradost.quicknovel.BookDownloader2Helper.requestRW
-import com.lagradost.quicknovel.CommonActivity.activity
-import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.DataStore
 import com.lagradost.quicknovel.DataStore.getDefaultSharedPrefs
 import com.lagradost.quicknovel.DataStore.getSharedPrefs
 import com.lagradost.quicknovel.DataStore.mapper
 import com.lagradost.quicknovel.ErrorLoadingException
+import com.lagradost.quicknovel.LIBRARIES_KEY
+import com.lagradost.quicknovel.mergeLibraries
+import com.lagradost.quicknovel.mergeLibraries
 import com.lagradost.quicknovel.LIBRARIES_KEY
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.mergeLibraries
@@ -35,7 +32,6 @@ import java.io.PrintWriter
 import java.lang.System.currentTimeMillis
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.concurrent.thread
 
 object BackupUtils {
     // Kinda hack, but I couldn't think of a better way
@@ -97,8 +93,13 @@ object BackupUtils {
         isEditingAppSettings: Boolean = false
     ) {
         val editor = DataStore.editor(this, isEditingAppSettings)
-        map?.forEach {
-            editor.setKeyRaw(it.key, it.value)
+        map?.forEach { (key, value)->
+            if(key == LIBRARIES_KEY && value is String){
+                mergeLibraries(value)
+            }
+            else{
+                editor.setKeyRaw(key, value)
+            }
         }
         editor.apply()
     }

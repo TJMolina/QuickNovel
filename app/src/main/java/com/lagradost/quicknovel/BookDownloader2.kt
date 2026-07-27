@@ -17,7 +17,6 @@ import android.graphics.BitmapFactory
 import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -53,14 +52,12 @@ import com.lagradost.quicknovel.BookDownloader2Helper.getDirectory
 import com.lagradost.quicknovel.BookDownloader2Helper.getSafeByteArray
 import com.lagradost.quicknovel.CommonActivity.activity
 import com.lagradost.quicknovel.CommonActivity.showToast
-import com.lagradost.quicknovel.DataStore.getSharedPrefs
 import com.lagradost.quicknovel.DataStore.mapper
 import com.lagradost.quicknovel.ImageDownloader.getImageBitmapFromUrl
 import com.lagradost.quicknovel.NotificationHelper.etaToString
 import com.lagradost.quicknovel.extractors.ExtractorApi
 import com.lagradost.quicknovel.mvvm.launchSafe
 import com.lagradost.quicknovel.mvvm.logError
-import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.settings.SettingsFragment.Companion.getBasePath
@@ -75,7 +72,6 @@ import com.lagradost.quicknovel.util.Coroutines.main
 import com.lagradost.quicknovel.util.Event
 import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
-import com.lagradost.quicknovel.util.amap
 import com.lagradost.quicknovel.util.pmap
 import com.lagradost.safefile.SafeFile
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
@@ -1289,15 +1285,14 @@ object BookDownloader2 {
         deleteNovelAsync(author, name, apiName)
     }
 
-
     /**
      * This get all novels in a specific library and refresh their total chapters
      * */
     suspend fun refreshNovelTotalChapters(currentLibraryIndex: Int) {
         if (currentLibraryIndex <= 0) return   // Tab 0 = Downloads
-        val keys      = getKeys(RESULT_BOOKMARK_STATE) ?: return
+        val keys = getKeys(RESULT_BOOKMARK_STATE) ?: return
         val libraries = (context ?: return).getLibraries()
-        val library   = libraries.getOrNull(currentLibraryIndex - 1) ?: return
+        val library = libraries.getOrNull(currentLibraryIndex - 1) ?: return
         coroutineScope {
             for (key in keys) {
                 val state = getKey<Int>(key)
@@ -1417,6 +1412,7 @@ object BookDownloader2 {
     val bookmarkChanged = Event<Int>()
     val refreshingChanged = Event<RefreshQuery>()
     val chapterReadChanged = Event<String>()
+    val updatePagesDetails = Event<Boolean>()
 
     @Immutable
     data class RefreshQuery(

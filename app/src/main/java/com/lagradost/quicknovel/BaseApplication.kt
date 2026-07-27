@@ -29,7 +29,7 @@ class BaseApplication : Application(), SingletonImageLoader.Factory, Configurati
     }
     private fun cleanLegacyCorruptBookmarks() {
         try {
-            val ctx: Context = context ?: return
+            val ctx: Context = applicationContext
             with(DataStore) {
                 ctx.getKeys(RESULT_BOOKMARK_STATE).forEach { stateKey ->
                     val bookKey = stateKey.replaceFirst(RESULT_BOOKMARK_STATE, RESULT_BOOKMARK)

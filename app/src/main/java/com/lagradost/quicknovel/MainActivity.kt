@@ -53,7 +53,6 @@ import com.lagradost.quicknovel.mvvm.observeNullable
 import com.lagradost.quicknovel.mvvm.safe
 import com.lagradost.quicknovel.network.CloudflareKiller
 import com.lagradost.quicknovel.providers.RedditProvider
-import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.library.LibraryManager
@@ -111,11 +110,6 @@ class MainActivity : AppCompatActivity() {
             mainActivity?.loadPopup(card)
         }
 
-        /*
-        *This variable is used to rescan the novels' properties and update ui after the
-        * user has made changes to the libraries, such as renaming or deleting them
-        * */
-        val loadingPreviewClosed = Event<Boolean>()
         fun loadPreviewPage(cached: ResultCached) {
             mainActivity?.loadPopup(cached)
         }
@@ -678,7 +672,7 @@ class MainActivity : AppCompatActivity() {
                                     context,
                                     allOptions,
                                     selectedIndex = selectedIndex,
-                                    {loadingPreviewClosed.invoke(false)},
+                                    BookDownloader2.updatePagesDetails,
                                     context.getString(R.string.bookmark)
                                 ) { selected ->
                                     if (selected == 0) {

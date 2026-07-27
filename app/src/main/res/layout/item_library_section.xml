@@ -40,7 +40,7 @@
             android:textAppearance="?android:attr/textAppearanceListItemSmall"
             android:gravity="center_vertical|start"
             tools:text="Nombre de la Librería"
-            />
+        />
 
         <ImageButton
             android:id="@+id/actionOptions"

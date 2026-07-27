@@ -58,6 +58,7 @@ import com.lagradost.quicknovel.compose.SinglePairSelectDialog
 import com.lagradost.quicknovel.compose.circle
 import com.lagradost.quicknovel.compose.ripple
 import com.lagradost.quicknovel.compose.rounded
+import com.lagradost.quicknovel.getLibraries
 import com.lagradost.quicknovel.tachiyomi.AndroidPreferenceStore
 import com.lagradost.quicknovel.tachiyomi.collectAsState
 import com.lagradost.quicknovel.ui.ReadType
@@ -70,12 +71,10 @@ import com.lagradost.quicknovel.ui.common.SortingMethodPair
 import com.lagradost.quicknovel.ui.common.SortingMethodType
 import com.lagradost.quicknovel.ui.common.normalSortingMethods
 import com.lagradost.quicknovel.ui.common.sortingMethods
-import com.lagradost.quicknovel.ui.history.HistoryAction.DismissDialog
-import com.lagradost.quicknovel.ui.history.HistoryAction.ResultAction
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlin.collections.getOrNull
 import kotlin.time.Duration.Companion.milliseconds
@@ -92,16 +91,12 @@ fun DownloadScreen(
         action
     )
 
-    val pagesNames = persistentListOf(
-        R.string.tab_downloads,
-        R.string.type_reading,
-        R.string.type_on_hold,
-        R.string.type_plan_to_read,
-        R.string.type_completed,
-        R.string.type_dropped,
-    )
-
     val context = LocalContext.current
+
+    val pagesNames = listOf(
+        stringResource(R.string.tab_downloads)
+    ).plus(context.getLibraries().map { it.title })
+        .toPersistentList()
     val store = AndroidPreferenceStore(context)
 
     val downloadIsRow = store.getBoolean(stringResource(R.string.download_list_view_key), true)

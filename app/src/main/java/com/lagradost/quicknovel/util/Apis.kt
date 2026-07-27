@@ -109,6 +109,7 @@ class Apis {
             //NovelPassionProvider(), // Site gone
             //NovelsOnlineProvider(), // not working
             NovLoveProvider(),
+            NovelPhoenixProvider(),
             PawReadProver(),
             PlanetaEpubProvider(),
             RanobesProvider(),

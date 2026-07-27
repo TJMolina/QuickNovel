@@ -26,6 +26,7 @@ import com.lagradost.quicknovel.EPUB_CURRENT_POSITION
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION_CHAPTER
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION_READ_AT
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION_SCROLL_CHAR
+import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HISTORY_FOLDER
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.PreferenceDelegate
@@ -41,6 +42,8 @@ import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.launchSafe
+import com.lagradost.quicknovel.ui.ReadType
+import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.CHAPTER_SORT
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.download.LAST_ACCES_SORT
@@ -515,7 +518,8 @@ class ResultViewModel : ViewModel() {
                     load.rating,
                     (load as? StreamResponse)?.data?.size ?: 1,
                     System.currentTimeMillis(),
-                    synopsis = load.synopsis
+                    synopsis = load.synopsis,
+                    posterHeaders = load.posterHeaders
                 )
             )
         }
@@ -576,7 +580,8 @@ class ResultViewModel : ViewModel() {
                 load.rating,
                 totalChapters,
                 System.currentTimeMillis(),
-                synopsis = load.synopsis
+                synopsis = load.synopsis,
+                posterHeaders = load.posterHeaders
             )
         )
     }
@@ -588,6 +593,7 @@ class ResultViewModel : ViewModel() {
                 RESULT_BOOKMARK_STATE, loadId.toString(), bookMarkId
             )
             updateBookmarkData()
+            BookDownloader2.bookmarkChanged(loadId)
         }
 
         libraryId.postValue(bookMarkId)
@@ -768,6 +774,33 @@ class ResultViewModel : ViewModel() {
             load = data
             loadResponse.postValue(Resource.Success(data))
             setState(card.id)
+        }
+    }
+    fun initState(card: ImmutableSearchResponse) = viewModelScope.launch {
+        val id = card.id ?: throw ErrorLoadingException("Require Id")
+        isGetLoaded = false
+        loadResponse.postValue(Resource.Loading(card.url))
+
+        loadMutex.withLock {
+            this@ResultViewModel.apiName = card.apiName
+            repo = Apis.getApiFromName(card.apiName)
+            loadUrl = card.url
+
+            val data = StreamResponse(
+                url = card.url,
+                name = card.name,
+                data = listOf(),
+                author = card.author,
+                posterUrl = card.posterUrl,
+                posterHeaders = card.posterHeaders,
+                rating = card.rating,
+                synopsis = card.synopsis,
+                tags = card.tags,
+                apiName = card.apiName
+            )
+            load = data
+            loadResponse.postValue(Resource.Success(data))
+            setState(id)
         }
     }
 

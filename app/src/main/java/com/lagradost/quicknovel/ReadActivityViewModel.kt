@@ -1634,6 +1634,7 @@ class ReadActivityViewModel : ViewModel() {
             scrollIndex.char
         )
         setKey(EPUB_CURRENT_POSITION, book.title(), scrollIndex.index)
+
         context?.let {
             setKey(
                 EPUB_CURRENT_POSITION_CHAPTER,
@@ -1704,7 +1705,7 @@ class ReadActivityViewModel : ViewModel() {
         ttsSession?.release()
         ttsSession = null
         translationManager.release()
-        super.onCleared()
+        BookDownloader2.chapterReadChanged(book.title())
     }
 
 

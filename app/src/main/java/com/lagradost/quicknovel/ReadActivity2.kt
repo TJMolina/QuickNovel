@@ -80,6 +80,7 @@ import kotlin.math.roundToInt
 import kotlin.properties.Delegates
 import com.google.android.material.tabs.TabLayout
 import com.lagradost.quicknovel.ReadActivityViewModel.MLSettings.Companion.AUTO_LANG
+import com.lagradost.quicknovel.util.UIHelper.fixSystemBarsPadding
 import com.lagradost.quicknovel.util.translation.models.TranslatorAgent
 
 class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
@@ -697,6 +698,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         readActivity = this
         binding = ReadMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        fixSystemBarsPadding(binding.readerBottomViewHolder, padTop = false, overlayCutout = false)
+        fixSystemBarsPadding(binding.readToolbarHolder, padBottom = false, overlayCutout = false)
 
         registerBattery()
 

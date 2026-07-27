@@ -24,6 +24,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.annotation.WorkerThread
+import androidx.compose.runtime.Immutable
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -52,11 +53,15 @@ import com.lagradost.quicknovel.BookDownloader2Helper.getDirectory
 import com.lagradost.quicknovel.BookDownloader2Helper.getSafeByteArray
 import com.lagradost.quicknovel.CommonActivity.activity
 import com.lagradost.quicknovel.CommonActivity.showToast
+import com.lagradost.quicknovel.DataStore.getSharedPrefs
 import com.lagradost.quicknovel.DataStore.mapper
 import com.lagradost.quicknovel.ImageDownloader.getImageBitmapFromUrl
 import com.lagradost.quicknovel.NotificationHelper.etaToString
 import com.lagradost.quicknovel.extractors.ExtractorApi
+import com.lagradost.quicknovel.mvvm.launchSafe
 import com.lagradost.quicknovel.mvvm.logError
+import com.lagradost.quicknovel.ui.ReadType
+import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.settings.SettingsFragment.Companion.getBasePath
 import com.lagradost.quicknovel.ui.settings.SettingsFragment.Companion.getDefaultDir
@@ -70,12 +75,15 @@ import com.lagradost.quicknovel.util.Coroutines.main
 import com.lagradost.quicknovel.util.Event
 import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
+import com.lagradost.quicknovel.util.amap
+import com.lagradost.quicknovel.util.pmap
 import com.lagradost.safefile.SafeFile
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPage
 import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject
 import com.tom_roush.pdfbox.text.PDFTextStripperByArea
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -97,7 +105,10 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.io.readBytes
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.random.Random
 import kotlin.io.readBytes
 
@@ -301,7 +312,7 @@ object BookDownloader2Helper {
         return generateId(apiName, load.author, load.name)
     }
 
-    fun Activity.checkWrite(): Boolean {
+    fun Context.checkWrite(): Boolean {
         return (ContextCompat.checkSelfPermission(
             this,
             WRITE_EXTERNAL_STORAGE
@@ -341,24 +352,15 @@ object BookDownloader2Helper {
             return false
         }
 
-        val displayName = "${sanitizeFilename(name)}.epub"
+        try {
+            val subDir =
+                activity.getBasePath().first ?: getDefaultDir(activity) ?: throw IOException("No file")
+            val displayName = "${sanitizeFilename(name)}.epub"
+            val foundFile = subDir.findFileOrThrow(displayName)
 
-        return try {
-            val (baseDir, _) = activity.getBasePath()
-
-            val epubFile = baseDir?.findFile(displayName)
-
-            if (epubFile != null && epubFile.exists() == true) {
-
-                activity.contentResolver.openFileDescriptor(epubFile.uriOrThrow(), "r")?.use {
-                    it.statSize > 0
-                } ?: false
-            } else {
-                false
-            }
-        } catch (e: Exception) {
-            com.lagradost.safefile.logError(e)
-            false
+            return foundFile.uri() != null
+        } catch (_ : Throwable) {
+            return false
         }
     }
 
@@ -736,34 +738,29 @@ object BookDownloader2Helper {
             if (rateLimit) {
                 api.api.rateLimitMutex.lock()
             }
-            var success = false
             try {
                 val page = api.loadHtml(data.url)
 
                 if (!page.isNullOrBlank()) {
                     rFile.createNewFile() // only create the file when actually needed
                     rFile.writeText("${data.name}\n${page}")
-                    success = true
+                    if (api.rateLimitTime > 0) {
+                        delay(api.rateLimitTime)
+                    }
+                    return@withContext true
+                } else {
+                    delay(5000L * (i + 1)) // ERROR
+                    if (api.rateLimitTime > 0) {
+                        delay(api.rateLimitTime)
+                    }
                 }
             } catch (e: Exception) {
                 logError(e)
+                delay(5000L * (i + 1))
             } finally {
                 if (rateLimit) {
                     api.api.rateLimitMutex.unlock()
                 }
-            }
-
-            if (success) {
-                if (api.rateLimitTime > 0) {
-                    val jitter = Random.nextLong(-500, 500)
-                    val totalDelay = (api.rateLimitTime + jitter).coerceAtLeast(100L)
-                    delay(totalDelay)
-                }
-                return@withContext true
-            } else {
-                val baseBackoff = 3000L * (1 shl i)
-                val jitter = Random.nextLong(1000, 5000)
-                delay(baseBackoff + jitter) // ERROR
             }
         }
         return@withContext false
@@ -999,10 +996,10 @@ object NotificationHelper {
             val unit = if (progressInBytes) "Kb" else ""
             val div = if (progressInBytes) 1024 else 1
 
-            if(isStreamNovel)
+            if (isStreamNovel)
                 "${stateProgressState.progress} / ${stateProgressState.total}"
             else
-                "${stateProgressState.progress / div} $unit / ${stateProgressState.total / div}${if(unit.isNotEmpty()) " $unit" else ""}"
+                "${stateProgressState.progress / div} $unit / ${stateProgressState.total / div}${if (unit.isNotEmpty()) " $unit" else ""}"
         } else ""
 
         val statusText = when (state) {
@@ -1185,6 +1182,20 @@ object BookDownloader2 {
         }
     }
 
+    suspend fun stream(card: ImmutableSearchResponse) = withContext(Dispatchers.IO) {
+        if (streamResultMutex.isLocked) return@withContext
+        streamResultMutex.withLock {
+            val api = getApiFromName(card.apiName)
+            val data = api.load(card.url)
+
+            if (data is com.lagradost.quicknovel.mvvm.Resource.Success) {
+                stream(data.value, card.apiName)
+            } else {
+                showToast(R.string.error_loading_novel, Toast.LENGTH_SHORT)
+            }
+        }
+    }
+
     private fun generateAndReadEpub(
         author: String?,
         name: String,
@@ -1292,9 +1303,10 @@ object BookDownloader2 {
                 val state = getKey<Int>(key)
                 if (state == library.id) {
                     val id = key.replaceFirst(RESULT_BOOKMARK_STATE, RESULT_BOOKMARK)
+
                     val cached = getKey<ResultCached>(id) ?: continue
                     launch {
-                        getNewTotalChapters(cached)
+                        getNewTotalChapters(cached,currentLibraryIndex)
                     }
                 }
             }
@@ -1303,69 +1315,61 @@ object BookDownloader2 {
 
 
     private val getNewTotalChaptersSemaphore = Semaphore(5)
-
     /**
      * This search for new chapters of a specific novel in library
      */
-    suspend fun getNewTotalChapters(cached: ResultCached, allowCache: Boolean = true): ResultCached? {
-        return getNewTotalChaptersSemaphore.withPermit {
+    suspend fun getNewTotalChapters(cached: ResultCached, page: Int): ResultCached? =
+        getNewTotalChaptersSemaphore.withPermit {
             try {
-                val api = getApiFromNameOrNull(cached.apiName) ?: return@withPermit null
-                val response = api.load(cached.source, allowCache)
-                val now = System.currentTimeMillis()
+                refreshingChanged(RefreshQuery(cached.id, true, page))
 
-                if (response !is com.lagradost.quicknovel.mvvm.Resource.Success) {
-                    UpdatesManager.getEntry( cached.id)?.let {
-                        UpdatesManager.saveEntry(it.copy(checkFailed = true, lastCheckedMs = now))
-                    }
+                val api = getApiFromNameOrNull(cached.apiName) ?: return@withPermit null
+                val response = api.load(cached.source, true)
+
+                if (response !is com.lagradost.quicknovel.mvvm.Resource.Success)
                     return@withPermit null
-                }
 
                 val loaded = response.value as? StreamResponse ?: return@withPermit null
-                val totalChapters = loaded.data.size
-                val newId = generateId(loaded, cached.apiName)
-                var finalCached = cached.copy(totalChapters = totalChapters)
 
+                val totalChapters = loaded.data.size
+                if (totalChapters == cached.totalChapters)
+                    return@withPermit null
+
+                val newCached = cached.copy(
+                    totalChapters = totalChapters
+                )
+
+                setKey(
+                    RESULT_BOOKMARK,
+                    cached.id.toString(),
+                    newCached
+                )
+
+                bookmarkChanged(cached.id)
+
+                val newId = generateId(loaded, cached.apiName)
                 if (cached.id != newId) {
                     migrationNovelMutex.withLock {
-                        migrateKeys(cached.id, newId, cached.name, loaded.name)
-                    }
-                    finalCached = finalCached.copy(id = newId)
-                    UpdatesManager.removeFromWatchList(cached.id)
-                }
-                setKey(RESULT_BOOKMARK, finalCached.id.toString(), finalCached)
-                val watchEntry = UpdatesManager.getEntry(finalCached.id)
-                    ?: UpdatesManager.getEntry(cached.id)
-
-                val oldTotal = watchEntry?.lastCheckedChapters ?: cached.totalChapters
-                val hasNewChapters = totalChapters > oldTotal
-
-                if (hasNewChapters || watchEntry != null) {
-                    val updatedWatch = when {
-                        watchEntry != null -> watchEntry.copy(
-                            novelId = finalCached.id,
-                            lastCheckedChapters = totalChapters,
-                            lastCheckedMs = now,
-                            checkFailed = false
-                        )
-                        else -> WatchEntry.fromCached(finalCached).copy(
-                            isPermanent = false,
-                            baselineChapters = oldTotal,
-                            lastCheckedChapters = totalChapters,
-                            lastCheckedMs = now
+                        migrateKeys(
+                            cached.id,
+                            newId,
+                            cached.name,
+                            loaded.name
                         )
                     }
-                    UpdatesManager.saveEntry(updatedWatch)
-                    UpdatesManager.remoteCheking(now)
                 }
 
-                return@withPermit finalCached
+                refreshingChanged(RefreshQuery(cached.id, false, page))
+
+                newCached
             } catch (e: Throwable) {
-                if (e !is CancellationException) logError(e)
-                return@withPermit null
+                refreshingChanged(RefreshQuery(cached.id, false, page))
+                if (e !is CancellationException)
+                    logError(e)
+                null
             }
         }
-    }
+
 
     @WorkerThread
     @Throws
@@ -1403,44 +1407,54 @@ object BookDownloader2 {
     }
 
     val downloadInfoMutex = Mutex()
-    val downloadProgress: HashMap<Int, DownloadProgressState> =
-        hashMapOf()
-    val downloadData: HashMap<Int, DownloadFragment.DownloadData> = hashMapOf()
+    val downloadProgress: ConcurrentHashMap<Int, DownloadProgressState> = ConcurrentHashMap()
+    val downloadData: ConcurrentHashMap<Int, DownloadFragment.DownloadData> = ConcurrentHashMap()
 
     val downloadProgressChanged = Event<Pair<Int, DownloadProgressState>>()
     val downloadDataChanged = Event<Pair<Int, DownloadFragment.DownloadData>>()
     val downloadRemoved = Event<Int>()
     val downloadDataRefreshed = Event<Int>()
+    val bookmarkChanged = Event<Int>()
+    val refreshingChanged = Event<RefreshQuery>()
+    val chapterReadChanged = Event<String>()
 
-    private fun initDownloadProgress() = ioSafe {
+    @Immutable
+    data class RefreshQuery(
+        val id : Int,
+        val refreshing : Boolean,
+        val page : Int,
+    )
+
+    private fun initDownloadProgress() = CoroutineScope(Dispatchers.Default).launchSafe {
         downloadInfoMutex.withLock {
-            val keys = getKeys(DOWNLOAD_FOLDER) ?: return@ioSafe
-            for (key in keys) {
+            // 1. 1000ms startup time from reading the *first* key <- this cant be optimized without better db
+            // 2. 100ms to get all keys in DOWNLOAD_FOLDER
+            val keys = getKeys(DOWNLOAD_FOLDER) ?: return@withLock
+            keys.forEach { key ->
                 val res =
-                    getKey<DownloadFragment.DownloadData>(key) ?: continue
+                    getKey<DownloadFragment.DownloadData>(key) ?: return@forEach
 
                 val localId = generateId(res.apiName, res.author, res.name)
 
-                BookDownloader2Helper.downloadInfo(
+                // 3. 1000ms to get all "downloadInfo"
+                val info = BookDownloader2Helper.downloadInfo(
                     context,
                     res.author,
                     res.name,
                     res.apiName
-                )?.let { info ->
-                    downloadData[localId] = res
+                ) ?: return@forEach
 
-                    downloadProgress[localId] = DownloadProgressState(
-                        state = DownloadState.Nothing,
-                        progress = info.progress,
-                        total = info.total,
-                        downloaded = info.downloaded,
-                        lastUpdatedMs = System.currentTimeMillis(),
-                        etaMs = null
-                    )
-                }
+                downloadData[localId] = res
+                downloadProgress[localId] = DownloadProgressState(
+                    state = DownloadState.Nothing,
+                    progress = info.progress,
+                    total = info.total,
+                    downloaded = info.downloaded,
+                    lastUpdatedMs = System.currentTimeMillis(),
+                    etaMs = null
+                )
             }
         }
-
         downloadDataRefreshed.invoke(0)
     }
 
@@ -1648,6 +1662,85 @@ object BookDownloader2 {
         }
     }
 
+    @WorkerThread
+    suspend fun downloadWorkThread(
+        card: ImmutableSearchResponse,
+    ) {
+        if (card.isImported) {
+            return
+        }
+        val id = card.id ?: return
+
+        currentDownloadsMutex.withLock {
+            if (currentDownloads.contains(id)) {
+                return
+            }
+        }
+
+        // set pending before download
+        downloadInfoMutex.withLock {
+            downloadProgress[id]?.apply {
+                state = DownloadState.IsPending
+                lastUpdatedMs = System.currentTimeMillis()
+                downloadProgressChanged.invoke(id to this)
+            }
+        }
+
+        try {
+            val api = getApiFromName(card.apiName)
+            val data = api.load(card.url, allowCache = false)
+
+            if (data is com.lagradost.quicknovel.mvvm.Resource.Success) {
+                val res = data.value
+                val newId = generateId(res, card.apiName)
+                val oldId = card.id
+                // migrate all data here and delete the old
+                if (oldId != newId) {
+                    // we cant have 2 migrations happening at the same time in case they overlap somehow, this is a *very* cold path anyways
+                    migrationNovelMutex.withLock {
+                        //showToast("Id mismatch, migrating data from ${card.name} to ${res.name}")
+                        migrateKeys(oldId, newId, card.name, res.name)
+                        BookDownloader2Helper.copyAllData(
+                            activity,
+                            card.author,
+                            card.name,
+                            card.apiName,
+                            res.author,
+                            res.name,
+                            api.name
+                        )
+                        deleteNovelAsync(card.author, card.name, card.apiName)
+                    }
+                }
+
+                when (res) {
+                    is EpubResponse -> {
+                        downloadWorkThread(
+                            res, api
+                        )
+                    }
+
+                    is StreamResponse -> {
+                        downloadWorkThread(
+                            res, api
+                        )
+                    }
+                }
+            } else {
+                // failed to get, but not inside download function, so fail here
+                downloadInfoMutex.withLock {
+                    downloadProgress[card.id]?.apply {
+                        state = DownloadState.IsFailed
+                        lastUpdatedMs = System.currentTimeMillis()
+                        downloadProgressChanged.invoke(card.id to this)
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            logError(t)
+        }
+    }
+
     fun changeDownloadStart(load: LoadResponse, api: APIRepository, to: Int?) {
         val id = generateId(load, api.name)
         if (to == null) {
@@ -1679,7 +1772,8 @@ object BookDownloader2 {
             load.tags,
             apiName,
             System.currentTimeMillis(),
-            System.currentTimeMillis()
+            System.currentTimeMillis(),
+            posterHeaders = load.posterHeaders
         )
 
         setKey(
@@ -1722,15 +1816,15 @@ object BookDownloader2 {
             load.tags,
             apiName,
             System.currentTimeMillis(),
-            prevDownloadData?.lastDownloaded
+            prevDownloadData?.lastDownloaded,
+            posterHeaders = load.posterHeaders
         )
         setKey(DOWNLOAD_FOLDER, id.toString(), currentDownloadData)
         setKey(DOWNLOAD_TOTAL, id.toString(), total)
 
         downloadInfoMutex.withLock {
-            downloadData[id] = currentDownloadData
-            downloadDataChanged.invoke(id to currentDownloadData)
 
+            downloadData[id] = currentDownloadData
             downloadProgress[id]?.apply {
                 state = DownloadState.IsPending
                 lastUpdatedMs = System.currentTimeMillis()
@@ -1757,6 +1851,7 @@ object BookDownloader2 {
                     downloadProgressChanged.invoke(id to it)
                 }
             }
+            downloadDataChanged.invoke(id to currentDownloadData)
         }
     }
 
@@ -1841,6 +1936,7 @@ object BookDownloader2 {
         count: Int
     ): Boolean? {
         val originalBitmap = imageXObject.image ?: return null
+        if (originalBitmap.width <= 0 || originalBitmap.height <= 0) return null
         if (!originalBitmap.isRecycled) {
             try {
                 val maxRes = 1200
@@ -2146,6 +2242,49 @@ object BookDownloader2 {
         }
     }
 
+    fun preloadPartialImportedPdf(bk: ImmutableSearchResponse) {
+        val context = activity ?: return
+        try {
+            val finalBook = File(
+                File(context.filesDir, getDirectory(bk.apiName, bk.author ?: "", bk.name)),
+                LOCAL_EPUB
+            )
+            if (finalBook.exists()) finalBook.delete()
+            val tempFolder = File(context.cacheDir, "temp_${bk.id}")
+            val book = EpubBook().apply {
+                metadata.addTitle(bk.name)
+                metadata.addAuthor(Author(bk.author))
+            }
+            tempFolder.listFiles()?.let {
+                for ((i, file) in it.withIndex())
+                    if (file.name.contains("img_")) {
+                        val res = Resource(file.readBytes(), file.name)
+                        book.addResource(res)
+                        if (i == 0) book.coverImage = res
+                    }
+            }
+
+            //use twice, to sort chapters
+            tempFolder.listFiles { _, name -> name.startsWith("chapter") }?.sortedBy {
+                it.name.filter { char -> char.isDigit() }.toInt()
+            }?.forEach { file ->
+                val res = Resource(file.readBytes(), file.name)
+                book.addSection(
+                    "Chapter ${file.name.replace("chapter", "").replace(".xhtml", "")}",
+                    res
+                )
+            }
+
+            finalBook.parentFile?.mkdirs()
+            //save all the book
+            FileOutputStream(finalBook).use { fos ->
+                EpubWriter().write(book, fos)
+            }
+        } catch (t: Throwable) {
+            logError(t)
+        }
+    }
+
 
     //Import epubs area -----------------------------------------------
     @WorkerThread
@@ -2323,7 +2462,7 @@ object BookDownloader2 {
                         if (currentState != DownloadState.IsPaused) {
                             break
                         }
-                        delay(200)
+                        delay(200.milliseconds)
                     }
 
                     if (currentState == DownloadState.IsStopped) {
@@ -2335,14 +2474,14 @@ object BookDownloader2 {
                 val stream = try {
                     link.get().body
                 } catch (e: Exception) {
-                    delay(api.rateLimitTime + 1000)
+                    delay((api.rateLimitTime + 1000).milliseconds)
                     continue
                 }
 
                 val length = stream.contentLength()
 
                 if (length <= LOCAL_EPUB_MIN_SIZE) {
-                    delay(api.rateLimitTime + 1000)
+                    delay((api.rateLimitTime + 1000).milliseconds)
                     continue
                 }
                 var progress = 0L
@@ -2370,7 +2509,10 @@ object BookDownloader2 {
                                 total = total,
                                 downloaded = progress,
                                 lastUpdatedMs = currentTime,
-                                etaMs = maxOf(((totalTimeSoFar * total) / progress) - totalTimeSoFar, 0)
+                                etaMs = maxOf(
+                                    ((totalTimeSoFar * total) / progress) - totalTimeSoFar,
+                                    0
+                                )
                             )
 
                             run {

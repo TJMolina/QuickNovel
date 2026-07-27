@@ -20,7 +20,7 @@ import org.jsoup.nodes.Document
 import com.lagradost.quicknovel.MainActivity.Companion.app
 import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.providers.LightNovelWorldProvider.PostsResponse
-import com.lagradost.quicknovel.util.CommonHeaders.ajaxHeaders
+import java.util.concurrent.ConcurrentHashMap
 
 class NovelLightProvider:  MainAPI() {
     override val name = "Novel Light"
@@ -30,8 +30,16 @@ class NovelLightProvider:  MainAPI() {
     override val iconBackgroundId = R.color.novelightColor
     override val hasMainPage = true
     override val hasReviews = true
-    var novelId = ""
+    val novelsIdRequired = ConcurrentHashMap<String, String>()
 
+    fun baseHeaders(url:String = "") =
+        if(url.isNotEmpty())
+            mapOf(
+                "X-Requested-With" to "XMLHttpRequest",
+                "Referer" to url,
+                "Accept" to "application/json, text/javascript, */*; q=0.01"
+            )
+    else emptyMap()
     override suspend fun loadMainPage(
         page: Int,
         mainCategory: String?,
@@ -66,7 +74,7 @@ class NovelLightProvider:  MainAPI() {
             ?.substringAfter("const BOOK_ID = \"")
             ?.substringBefore("\"") ?: return emptyList()
         val url = "$mainUrl/book/ajax/chapter-pagination?csrfmiddlewaretoken=$csrfToken&book_id=$bookId&page=1&pagination=0"
-        val response = app.get(url, headers = ajaxHeaders(url)).parsed<ChapterResponse>()
+        val response = app.get(url, headers = baseHeaders(url)).parsed<ChapterResponse>()
         val document = Jsoup.parse(response.html)
        return document.select("a").mapNotNull { li ->
             if(li.selectFirst("span.cost") != null) return@mapNotNull null
@@ -85,7 +93,7 @@ class NovelLightProvider:  MainAPI() {
         val title = document.selectFirst("header h1")?.text() ?: throw ErrorLoadingException("Title not found")
 
         val scriptData = document.selectFirst("#comments script")?.data() ?: ""
-        novelId = Regex("""const OBJECT_BY_COMMENT = (\d+);""").find(scriptData)?.groupValues?.get(1) ?: ""
+        novelsIdRequired[url] = Regex("""const OBJECT_BY_COMMENT = (\d+);""").find(scriptData)?.groupValues?.get(1) ?: ""
 
 
         val chapters = getChapters(document)
@@ -126,10 +134,9 @@ class NovelLightProvider:  MainAPI() {
         page: Int,
         showSpoilers: Boolean
     ): List<UserReview> {
-        if (novelId.isEmpty()) return emptyList()
 
         //https://novelight.net/api/comments/?content_type=18&limit=20&object_id=308&page=1
-        val realUrl = "$mainUrl/api/comments/?content_type=18&limit=20&object_id=$novelId&page=$page"
+        val realUrl = "$mainUrl/api/comments/?content_type=18&limit=20&object_id=${novelsIdRequired[url]}&page=$page"
 
         val res = app.get(realUrl).parsedSafe<NovelLightReviewsResponse>()
         val dataList = res?.results ?: return emptyList()
@@ -148,7 +155,7 @@ class NovelLightProvider:  MainAPI() {
     override suspend fun loadHtml(url: String): String {
         val jsonResponse = app.get(
             url = ajaxUrl + "/${url.substringAfterLast("/book/chapter/")}",
-            headers = ajaxHeaders(url),
+            headers = baseHeaders(url),
         ).parsed<LoadHtmlResponse>()
         return jsonResponse.content
     }

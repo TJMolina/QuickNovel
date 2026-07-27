@@ -1,10 +1,37 @@
 package com.lagradost.quicknovel
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.net.toUri
+import coil3.network.NetworkHeaders
+import coil3.network.httpHeaders
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import com.lagradost.quicknovel.BaseApplication.Companion.getKey
+import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE
+import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE_PDF
+import com.lagradost.quicknovel.BookDownloader2Helper.getFilenameIMG
+import com.lagradost.quicknovel.BookDownloader2Helper.sanitizeFilename
+import com.lagradost.quicknovel.MainActivity.Companion.loadResult
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.mvvm.safeApiCall
+import com.lagradost.quicknovel.ui.common.ImmutableHeadMainPageResponse
+import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
+import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.util.Coroutines.threadSafeListOf
+import com.lagradost.quicknovel.util.ResultCached
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.collections.immutable.toPersistentMap
+import me.xdrop.fuzzywuzzy.FuzzySearch
 import org.jsoup.Jsoup
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 data class OnGoingSearch(
     val apiName: String,
@@ -26,11 +53,12 @@ private fun String?.removeAds(): String? {
         // https://stackoverflow.com/questions/14384431/html-element-for-ad
 
         document.html()
-    } catch (t : Throwable) {
+    } catch (t: Throwable) {
         logError(t)
         this
     }
 }
+
 
 class APIRepository(val api: MainAPI) {
     val unixTime: Long
@@ -44,7 +72,6 @@ class APIRepository(val api: MainAPI) {
             val response: LoadResponse,
             val hash: Pair<String, String>
         )
-
         private val cache = threadSafeListOf<SavedLoadResponse>()
         private var cacheIndex: Int = 0
         const val cacheSize = 20
@@ -108,10 +135,80 @@ class APIRepository(val api: MainAPI) {
         }
     }
 
+    suspend fun loadResult(url: String, allowCache: Boolean = true): Result<ImmutableSearchResponse> {
+        return runCatching {
+            try {
+                if (api.hasRateLimit) {
+                    api.rateLimitMutex.lock()
+                }
+                val fixedUrl = api.fixUrl(url)
+                val lookingForHash = api.name to fixedUrl
+
+                if (allowCache) {
+                    synchronized(cache) {
+                        for (item in cache) {
+                            // 10 min save
+                            if (item.hash == lookingForHash && (unixTime - item.unixTime) < cacheTimeSec) {
+                                return@runCatching ImmutableSearchResponse.from(item.response)
+                            }
+                        }
+                    }
+                }
+
+                val response = api.load(fixedUrl) ?: throw ErrorLoadingException("No data")
+                val add = SavedLoadResponse(unixTime, response, lookingForHash)
+                if (allowCache) {
+                    synchronized(cache) {
+                        if (cache.size > cacheSize) {
+                            cache[cacheIndex] = add // rolling cache
+                            cacheIndex = (cacheIndex + 1) % cacheSize
+                        } else {
+                            cache.add(add)
+                        }
+                    }
+                }
+                ImmutableSearchResponse.from(response)
+                /*?.also { response ->
+                    // Remove all blank tags as early as possible
+                    val add = SavedLoadResponse(unixTime, response, lookingForHash)
+                    if (allowCache) {
+                        synchronized(cache) {
+                            if (cache.size > cacheSize) {
+                                cache[cacheIndex] = add // rolling cache
+                                cacheIndex = (cacheIndex + 1) % cacheSize
+                            } else {
+                                cache.add(add)
+                            }
+                        }
+                    }
+                }*/
+
+            } finally {
+                if (api.hasRateLimit) {
+                    api.rateLimitMutex.unlock()
+                }
+            }
+        }
+    }
+
     suspend fun search(query: String): Resource<List<SearchResponse>> {
         return safeApiCall {
             api.search(query) ?: throw ErrorLoadingException("No data")
         }
+    }
+
+    suspend fun searchResult(query: String): Result<List<ImmutableSearchResponse>> = runCatching {
+        api.search(query)?.map(ImmutableSearchResponse::from)
+            ?: throw ErrorLoadingException("No data")
+    }
+
+    suspend fun loadMainPageResult(
+        page: Int,
+        mainCategory: String?,
+        orderBy: String?,
+        tag: String?,
+    ): Result<ImmutableHeadMainPageResponse> = runCatching {
+        ImmutableHeadMainPageResponse.from(api.loadMainPage(page, mainCategory, orderBy, tag))
     }
 
     /**

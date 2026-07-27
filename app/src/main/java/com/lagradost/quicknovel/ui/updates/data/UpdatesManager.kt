@@ -65,7 +65,7 @@ object UpdatesManager {
     /** Verifies online and persists the result. Returns the updated WatchEntry. */
 
     suspend fun checkForUpdate(entry: WatchEntry): WatchEntry {
-        val updatedCached = BookDownloader2.getNewTotalChapters(fromWatchEntry(entry), false)
+        val updatedCached = BookDownloader2.getNewTotalChapters(fromWatchEntry(entry), -1)
         val now = System.currentTimeMillis()
 
         val updatedEntry = if (updatedCached != null) {

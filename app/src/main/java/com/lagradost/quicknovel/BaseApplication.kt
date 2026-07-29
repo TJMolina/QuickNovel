@@ -13,6 +13,7 @@ import com.lagradost.quicknovel.DataStore.getKeys
 import com.lagradost.quicknovel.DataStore.removeKey
 import com.lagradost.quicknovel.DataStore.removeKeys
 import com.lagradost.quicknovel.DataStore.setKey
+import com.lagradost.quicknovel.NotificationHelper.createNotificationChannels
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.util.ResultCached
 import java.lang.ref.WeakReference
@@ -23,7 +24,7 @@ class BaseApplication : Application(), SingletonImageLoader.Factory, Configurati
         super.onCreate()
         //clean corrupted books
         cleanLegacyCorruptBookmarks()
-        NotificationHelper.createAllNotificationChannels(this)
+        this.createNotificationChannels()
         //check worker for updates
         NovelAutoUpdateScheduler.apply(this)
     }

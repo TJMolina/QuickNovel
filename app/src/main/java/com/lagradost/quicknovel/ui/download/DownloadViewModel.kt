@@ -16,7 +16,6 @@ import com.lagradost.quicknovel.BaseApplication.Companion.removeKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKey
 import com.lagradost.quicknovel.BookDownloader2
 import com.lagradost.quicknovel.BookDownloader2.currentDownloads
-import com.lagradost.quicknovel.BookDownloader2.currentDownloadsMutex
 import com.lagradost.quicknovel.BookDownloader2.downloadInfoMutex
 import com.lagradost.quicknovel.BookDownloader2.downloadProgress
 import com.lagradost.quicknovel.BookDownloader2.downloadProgressChanged
@@ -28,7 +27,6 @@ import com.lagradost.quicknovel.DOWNLOAD_EPUB_LAST_ACCESS
 import com.lagradost.quicknovel.DOWNLOAD_NORMAL_SORTING_METHOD
 import com.lagradost.quicknovel.DOWNLOAD_SETTINGS
 import com.lagradost.quicknovel.DOWNLOAD_SORTING_METHOD
-import com.lagradost.quicknovel.DefaultLibrary
 import com.lagradost.quicknovel.DownloadActionType
 import com.lagradost.quicknovel.DownloadFileWorkManager
 import com.lagradost.quicknovel.DownloadProgressState
@@ -167,17 +165,16 @@ class DownloadViewModel : ViewModel() {
             cardsData.values
         }
 
-        val values = currentDownloadsMutex.withLock {
+        val values =
             allValues.filter { card ->
                 val notImported = !card.isImported && card.apiName != IMPORT_SOURCE_PDF
                 val canDownload =
                     card.downloadedTotal <= 0 || (card.downloadedCount * 100 / card.downloadedTotal) > 90
-                val notDownloading = !currentDownloads.contains(
+                val notDownloading = !currentDownloads.containsKey(
                     card.id
                 )
                 notImported && canDownload && notDownloading
             }
-        }
 
         downloadInfoMutex.withLock {
             for (card in values) {
@@ -189,9 +186,10 @@ class DownloadViewModel : ViewModel() {
             }
         }
 
+        val ctx = context ?: return
         for (card in values) {
             if (card.downloadedTotal <= 0 || (card.downloadedCount * 100 / card.downloadedTotal) > 90) {
-                BookDownloader2.downloadWorkThread(card)
+                BookDownloader2.downloadWorkThread(card, ctx)
             }
         }
     }

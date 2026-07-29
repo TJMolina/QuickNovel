@@ -50,7 +50,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewLightDark
@@ -60,6 +62,7 @@ import coil3.compose.AsyncImage
 import com.lagradost.quicknovel.CommonActivity.activity
 import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.R
+import com.lagradost.quicknovel.compose.BaseStyles.blackButtonColors
 import com.lagradost.quicknovel.compose.BaseStyles.whiteButtonColors
 import com.lagradost.quicknovel.compose.CloudStreamTheme
 import com.lagradost.quicknovel.compose.CloudStreamTheme.colors
@@ -84,6 +87,7 @@ import com.lagradost.quicknovel.ui.common.loading
 import com.lagradost.quicknovel.ui.common.loadingLineMargin
 import com.lagradost.quicknovel.util.AppUtils.openInBrowser
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
+import com.lagradost.quicknovel.util.UIHelper.html
 import com.lagradost.quicknovel.util.UIHelper.humanReadableByteCountSI
 import com.lagradost.quicknovel.util.toPx
 import kotlinx.collections.immutable.ImmutableList
@@ -122,7 +126,16 @@ fun ResultScreenImpl(
     val outerListState = rememberLazyListState()
 
     val scrollAlpha = remember {
-        derivedStateOf { 1.0f } // (outerListState.value.toFloat() / 200.toPx.toFloat()).coerceIn(0.0f, 1.0f)
+        derivedStateOf {
+            if (outerListState.firstVisibleItemIndex != 0) {
+                1.0f
+            } else {
+                (outerListState.firstVisibleItemScrollOffset.toFloat() / 200.toPx.toFloat()).coerceIn(
+                    0.0f,
+                    1.0f
+                )
+            }
+        } // (outerListState.value.toFloat() / 200.toPx.toFloat()).coerceIn(0.0f, 1.0f)
     }
 
     Box {
@@ -206,7 +219,7 @@ fun ResultScreenImpl(
                             .fillMaxWidth()
                             .height(75.dp)
                             .clip(RoundedCornerShape(15.dp))
-                            .background(colors.surface)
+                            .background(colors.surfaceContainer)
                     ) {
                         TextIcon(
                             R.string.bookmark,
@@ -239,7 +252,10 @@ fun ResultScreenImpl(
             }
             item {
                 HorizontalTab(
-                    pagerState = pagerState, names = tabNames, containerColor = colors.background
+                    edgePadding = 15.dp,
+                    pagerState = pagerState,
+                    names = tabNames,
+                    containerColor = colors.background
                 )
             }
             item {
@@ -408,9 +424,9 @@ fun NovelPage(
         Box(
             modifier = Modifier
                 .height(1.dp)
+                .padding(horizontal = 15.dp)
                 .fillMaxWidth()
                 .background(color = colors.onBackground.copy(alpha = 0.5f))
-                .padding(horizontal = 15.dp)
         )
 
         if (!response.synopsis.isNullOrBlank()) {
@@ -424,11 +440,12 @@ fun NovelPage(
                     .rounded()
                     .ripple(textInteractionSource)
                     .padding(5.dp),
-                text = response.synopsis,
+                // TODO make into a helper
+                text = AnnotatedString.fromHtml(response.synopsis.replace("</p>", "<br/><br/>")),
                 color = colors.onBackground,
                 fontSize = 14.sp,
                 lineHeight = 15.sp,
-                maxLines = if (expanded.value) Int.MAX_VALUE else 6,
+                maxLines = if (expanded.value) Int.MAX_VALUE else 8,
                 overflow = TextOverflow.Ellipsis
             )
         }
@@ -460,33 +477,34 @@ fun NovelPage(
                     ), maxLines = if (expandedTags.value) {
                     Int.MAX_VALUE
                 } else {
-                    2
+                    3
                 }
             ) {
                 response.tags.forEach { tag ->
                     Text(
                         text = tag,
+                        fontSize = 14.sp,
                         modifier = Modifier
-                            .padding(5.dp)
+                            .padding(3.dp)
                             .rounded()
                             .background(color = colors.surfaceVariant)
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .padding(horizontal = 10.dp, vertical = 2.dp)
                     )
                 }
             }
         }
-
-        Box(
-            modifier = Modifier
-                .height(1.dp)
-                .fillMaxWidth()
-                .background(color = colors.onBackground.copy(alpha = 0.5f))
-                .padding(horizontal = 15.dp)
-        )
+        /*
+                Box(
+                    modifier = Modifier
+                        .height(1.dp)
+                        .padding(horizontal = 15.dp)
+                        .fillMaxWidth()
+                        .background(color = colors.onBackground.copy(alpha = 0.5f))
+                )*/
 
         // Text(stringResource(R.string.downloaded), modifier = Modifier.padding(5.dp))
 
-        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        /*Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(text = downloadState.progress.toString())
             LinearWavyProgressIndicator(
                 progress = { downloadState.progressPercentage },
@@ -496,9 +514,9 @@ fun NovelPage(
                 amplitude = indicatorAmplitude
             )
             Text(text = downloadState.total.toString())
-        }
+        }*/
 
-        Row {
+        Row(Modifier.padding(horizontal = 10.dp)) {
             TextButton(
                 colors = whiteButtonColors,
                 modifier = Modifier
@@ -512,10 +530,19 @@ fun NovelPage(
                             )
                         )
                     )
-                }) { Text(stringResource(R.string.stream_read)) }
+                }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        modifier = Modifier.padding(horizontal = 4.dp).size(24.dp),
+                        painter = painterResource(R.drawable.ic_baseline_play_arrow_24),
+                        contentDescription = null
+                    )
+                    Text(stringResource(R.string.stream_read))
+                }
+            }
 
             TextButton(
-                colors = whiteButtonColors,
+                colors = blackButtonColors,
                 modifier = Modifier
                     .padding(2.dp)
                     .weight(1.0f),
@@ -527,10 +554,18 @@ fun NovelPage(
                             )
                         )
                     )
-                }) { Text(stringResource(R.string.download)) }
+                }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        modifier = Modifier.padding(horizontal = 4.dp).size(24.dp),
+                        painter = painterResource(R.drawable.netflix_download),
+                        contentDescription = null
+                    )
+                    Text(stringResource(R.string.download))
+                } }
 
 
-            TextButton(
+            /*TextButton(
                 colors = whiteButtonColors,
                 modifier = Modifier
                     .padding(2.dp)
@@ -545,7 +580,7 @@ fun NovelPage(
                     )
                 }) {
                 Text(stringResource(R.string.read_epub))
-            }
+            }*/
         }
 
     }

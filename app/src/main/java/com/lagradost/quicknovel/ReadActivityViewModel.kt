@@ -1700,12 +1700,15 @@ class ReadActivityViewModel : ViewModel() {
     }
 
     override fun onCleared() {
-        println("onCleared===${System.currentTimeMillis()}")
+        //println("onCleared===${System.currentTimeMillis()}")
         lastChangeIndex?.let { setScrollKeys(it) }
         ttsSession?.release()
         ttsSession = null
         translationManager.release()
         BookDownloader2.chapterReadChanged(book.title())
+        if(::book.isInitialized) {
+            BookDownloader2.chapterReadChanged(book.title())
+        }
     }
 
 

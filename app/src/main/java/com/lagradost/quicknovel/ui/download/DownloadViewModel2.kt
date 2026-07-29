@@ -11,7 +11,6 @@ import com.lagradost.quicknovel.BaseApplication.Companion.removeKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKey
 import com.lagradost.quicknovel.BookDownloader2
 import com.lagradost.quicknovel.BookDownloader2.currentDownloads
-import com.lagradost.quicknovel.BookDownloader2.currentDownloadsMutex
 import com.lagradost.quicknovel.BookDownloader2.downloadInfoMutex
 import com.lagradost.quicknovel.BookDownloader2.downloadProgress
 import com.lagradost.quicknovel.BookDownloader2.downloadProgressChanged
@@ -42,7 +41,6 @@ import com.lagradost.quicknovel.ui.common.updateRows
 import com.lagradost.quicknovel.getLibraries
 import com.lagradost.quicknovel.ui.download.DownloadDialog.*
 import com.lagradost.quicknovel.util.ResultCached
-import com.lagradost.quicknovel.util.cmap
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentHashMap
@@ -283,9 +281,11 @@ class DownloadViewModel2(application: Application) : AndroidViewModel(applicatio
             SearchResponseOperation.Read -> {
                 readEpub(action.response)
             }
-            SearchResponseOperation.Open,SearchResponseOperation.NoOp -> {
+
+            SearchResponseOperation.Open, SearchResponseOperation.NoOp -> {
                 action.doAction()
             }
+
             SearchResponseOperation.Stream -> {
                 viewModelScope.launch {
                     val id = action.response.id!!
@@ -354,9 +354,10 @@ class DownloadViewModel2(application: Application) : AndroidViewModel(applicatio
             }
 
             SearchResponseOperation.Download -> {
-                viewModelScope.launch {
-                    BookDownloader2.downloadWorkThread(action.response)
-                }
+                DownloadFileWorkManager.download(
+                    action.response,
+                    BaseApplication.context ?: return
+                )
             }
 
             SearchResponseOperation.Pause -> {
@@ -390,19 +391,17 @@ class DownloadViewModel2(application: Application) : AndroidViewModel(applicatio
         val downloadPage = progressState.pages.getOrNull(0) ?: return
 
         val values =
-            currentDownloadsMutex.withLock {
-                downloadPage.data.filter { (id, card) ->
-                    val notImported = !card.isImported && card.apiName != IMPORT_SOURCE_PDF
-                    val downloadState = card.downloadState ?: return@filter false
+            downloadPage.data.filter { (id, card) ->
+                val notImported = !card.isImported && card.apiName != IMPORT_SOURCE_PDF
+                val downloadState = card.downloadState ?: return@filter false
 
-                    val canDownload =
-                        downloadState.total > 0 && downloadState.progressPercentage > 0.9f
+                val canDownload =
+                    downloadState.total > 0 && downloadState.progressPercentage > 0.9f
 
-                    val notDownloading = !currentDownloads.contains(
-                        id
-                    )
-                    notImported && canDownload && notDownloading
-                }
+                val notDownloading = !currentDownloads.containsKey(
+                    id
+                )
+                notImported && canDownload && notDownloading
             }
 
         downloadInfoMutex.withLock {
@@ -415,10 +414,9 @@ class DownloadViewModel2(application: Application) : AndroidViewModel(applicatio
             }
         }
 
-        withContext(Dispatchers.IO) {
-            values.values.cmap { card ->
-                BookDownloader2.downloadWorkThread(card)
-            }
+        val context = BaseApplication.context ?: return
+        for (card in values.values) {
+            DownloadFileWorkManager.download(card, context)
         }
     }
 

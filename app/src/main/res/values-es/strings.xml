@@ -362,14 +362,14 @@
     <string name="novel_updates_notification_body_single">%1$s tiene capítulos nuevos</string>
     <string name="novel_updates_notification_body_multi">%1$d novelas tienen capítulos nuevos</string>
 
+    <!-- Filtros para la lista de novelas a verificar estado de actualizacion -->
+    <string name="updates_filter_all">Todas</string>
+    <string name="updates_filter_watching">Seguidas</string>
+    <string name="updates_filter_not_watching">No seguidas</string>
+
     <!-- Per-novel notification body -->
     <plurals name="novel_updates_new_chapters">
         <item quantity="one">%1$d capítulo nuevo disponible</item>
         <item quantity="other">%1$d capítulos nuevos disponibles</item>
     </plurals>
-
-    <!-- Filtros para la lista de novelas a verificar estado de actualizacion -->
-    <string name="updates_filter_all">Todas</string>
-    <string name="updates_filter_watching">Seguidas</string>
-    <string name="updates_filter_not_watching">No seguidas</string>
 </resources>

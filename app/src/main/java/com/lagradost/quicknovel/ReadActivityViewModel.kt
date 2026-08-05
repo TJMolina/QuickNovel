@@ -15,7 +15,6 @@ import android.widget.Toast
 import androidx.annotation.WorkerThread
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.graphics.toColorInt
-import androidx.core.graphics.values
 import androidx.core.text.getSpans
 import androidx.core.text.toSpanned
 import androidx.lifecycle.LiveData
@@ -74,8 +73,10 @@ import io.noties.markwon.image.AsyncDrawable
 import io.noties.markwon.image.AsyncDrawableSpan
 import io.noties.markwon.image.ImageSizeResolver
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
@@ -93,8 +94,13 @@ import java.io.File
 import java.io.InputStream
 import java.net.URLDecoder
 import java.security.MessageDigest
+import java.util.Collections
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeoutException
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.coroutines.coroutineContext
+import kotlin.math.abs
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty
 
@@ -557,7 +563,8 @@ class ReadActivityViewModel : ViewModel() {
     private val chapterMutex = Mutex()
     private val chapterExpandMutex = Mutex()
 
-    private val requested: HashSet<Int> = hashSetOf()
+    private val loadingJobs = ConcurrentHashMap<Int, Job>()
+    private val requested: MutableSet<Int> = Collections.synchronizedSet(mutableSetOf<Int>())
 
     private val loading: HashSet<Int> = hashSetOf()
     private val chapterData: HashMap<Int, Resource<LiveChapterData>?> = hashMapOf()
@@ -613,16 +620,48 @@ class ReadActivityViewModel : ViewModel() {
         index: Int,
         notify: Boolean = true,
         postLoading: Boolean = false,
-    ) {
+    ) = coroutineScope {
         val range =
-            if(!notify) (index - initPaddingBottom..index + initPaddingTop)
+            if (!notify) (index - initPaddingBottom..index + initPaddingTop)
             else (index - chapterPaddingBottom..index + chapterPaddingTop)
 
-        for (idx in range) {
-            requested += idx
-            loadIndividualChapter(idx, notify = notify, postLoading = postLoading)
-        }
+        // Prioritize chapters closest to current index
+        val sortedRange = range.sortedBy { abs(it - currentIndex) }
 
+        for (idx in sortedRange) {
+            if (requested.contains(idx)) {
+                // If it's already requested but the job is dead, we might want to retry
+                val job = loadingJobs[idx]
+                if (job == null || !job.isActive) {
+                    // fallthrough to start it
+                } else {
+                    continue
+                }
+            }
+            requested += idx
+            val job = launch(Dispatchers.IO) {
+                loadIndividualChapter(idx, notify = notify, postLoading = postLoading)
+            }
+            loadingJobs[idx] = job
+        }
+        cancelDistantChapters(index)
+    }
+
+    private fun cancelDistantChapters(index: Int) {
+        val padding = maxOf(chapterPaddingTop, chapterPaddingBottom) + 5
+        val min = index - padding
+        val max = index + padding
+
+        val iterator = loadingJobs.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            val index = entry.key
+            if (index !in min..max) {
+                entry.value.cancel()
+                iterator.remove()
+                requested.remove(index)
+            }
+        }
     }
 
     private fun updateIndex(index: Int) {
@@ -790,9 +829,15 @@ class ReadActivityViewModel : ViewModel() {
     ) {
         if (index < 0) return
 
+        if (reTranslate || reload) {
+            loadingJobs[index]?.cancel()
+        }
+
         // set loading and return early if already loading or return cache
         chapterMutex.withLock {
-            if (loading.contains(index)) return
+            if (loading.contains(index)) {
+                 if (!reTranslate && !reload) return
+            }
             if (!reload && !reTranslate && chapterData.contains(index)) {
                 return
             }
@@ -801,6 +846,10 @@ class ReadActivityViewModel : ViewModel() {
             chapterData[index] = Resource.Loading(null)
             if (notify) notifyChapterUpdate(index)
         }
+
+        // Save current job
+        val currentJob = currentCoroutineContext()[Job]
+        if (currentJob != null) loadingJobs[index] = currentJob
 
         // we check for out of bounds and if it is out of bounds then try to expand it (Reddit next)
         // we lock it here to prevent duplicate loading when init
@@ -848,9 +897,11 @@ class ReadActivityViewModel : ViewModel() {
 
         // load the data and precalculate everything needed
         try {
-            val data = safeApiCall {
+            val dataResource = safeApiCall {
                 book.getChapterData(index, reload)
-            }.map { text ->
+            }
+            
+            val data = dataResource.map { text ->
                 val rawText = preParseHtml(text, authorNotes)
                 // val renderedBuilder = SpannableStringBuilder()
                 // val lengths : IntArray
@@ -876,31 +927,32 @@ class ReadActivityViewModel : ViewModel() {
                                 Resources.getSystem()
                             )
                     }
+                }
 
-                    // translation may strip stuff, idk how to solve that in a clean way atm
-                    translate(
-                        rendered,
-                        spans
-                    ) { (progressChapter, progressInnerIndex, progressInnerTotal) ->
-                        val progressText =
-                            "${context?.getString(R.string.translating)} ${
-                                book.getChapterTitle(
-                                    progressChapter
-                                )
-                            } ($progressInnerIndex/$progressInnerTotal)"
-                        if (postLoading) {
-                            _loadingStatus.postValue(Resource.Loading(progressText))
-                        } else {
-                            chapterMutex.withLock {
-                                chapterData[index] =
-                                    Resource.Loading(progressText)
-                                if (notify) notifyChapterUpdate(index)
-                            }
+                // translation may strip stuff, idk how to solve that in a clean way atm
+                // translate outside markwonMutex to allow multiple translations or rendering in parallel
+                translate(
+                    rendered,
+                    spans
+                ) { (progressChapter, progressInnerIndex, progressInnerTotal) ->
+                    val progressText =
+                        "${context?.getString(R.string.translating)} ${
+                            book.getChapterTitle(
+                                progressChapter
+                            )
+                        } ($progressInnerIndex/$progressInnerTotal)"
+                    if (postLoading) {
+                        _loadingStatus.postValue(Resource.Loading(progressText))
+                    } else {
+                        chapterMutex.withLock {
+                            chapterData[index] =
+                                Resource.Loading(progressText)
+                            if (notify) notifyChapterUpdate(index)
                         }
-                    }.let { (mlRender, mlSpans) ->
-                        rendered = mlRender
-                        spans = mlSpans
                     }
+                }.let { (mlRender, mlSpans) ->
+                    rendered = mlRender
+                    spans = mlSpans
                 }
 
                 LiveChapterData(
@@ -918,8 +970,16 @@ class ReadActivityViewModel : ViewModel() {
             chapterMutex.withLock {
                 chapterData[index] = data
             }
+        } catch (e: CancellationException) {
+            chapterMutex.withLock {
+                if (chapterData[index] is Resource.Loading) {
+                    chapterData.remove(index)
+                }
+                requested.remove(index)
+            }
+            throw e
         } catch (t: Throwable) {
-            // Tasks.await may throw
+            requested.remove(index)
             chapterMutex.withLock {
                 chapterData[index] = throwableToResource(t)
             }
@@ -927,9 +987,13 @@ class ReadActivityViewModel : ViewModel() {
             chapterMutex.withLock {
                 loading -= index
                 if (notify) notifyChapterUpdate(index)
+                if (loadingJobs[index] == currentJob) {
+                    loadingJobs.remove(index)
+                }
             }
         }
     }
+
 
     private fun hashString(text: ByteArray): String {
         val digest = MessageDigest.getInstance("MD5").digest(text)
@@ -1052,6 +1116,7 @@ class ReadActivityViewModel : ViewModel() {
             for (key in keys) {
                 if (key < lower || key > upper) {
                     chapterData.remove(key)
+                    requested.remove(key)
                 }
             }
 

@@ -24,7 +24,7 @@ object NovelAutoUpdateScheduler {
     fun apply(context: Context, forceUpdate: Boolean = false) {
         val prefs     = PreferenceManager.getDefaultSharedPreferences(context)
         val enabled   = prefs.getBoolean(KEY_ENABLED, false)
-        val intervalH = prefs.getString(KEY_INTERVAL, "24")?.toLongOrNull() ?: 24L
+        val intervalH = (prefs.all[KEY_INTERVAL]?.toString() ?: "24").toLongOrNull() ?: 24L
         val wm        = WorkManager.Companion.getInstance(context)
 
         if (!enabled) {
@@ -72,7 +72,8 @@ object NovelAutoUpdateScheduler {
     fun isEnabled(context: Context): Boolean =
         PreferenceManager.getDefaultSharedPreferences(context).getBoolean(KEY_ENABLED, false)
 
-    fun currentInterval(context: Context): Long =
-        PreferenceManager.getDefaultSharedPreferences(context)
-            .getString(KEY_INTERVAL, "24")?.toLongOrNull() ?: 24L
+    fun currentInterval(context: Context): Long {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        return (prefs.all[KEY_INTERVAL]?.toString() ?: "24").toLongOrNull() ?: 24L
+    }
 }

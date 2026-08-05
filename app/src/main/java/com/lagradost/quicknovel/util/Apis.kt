@@ -103,7 +103,6 @@ class Apis {
             NovelFireProvider(),
             NovelFullNETProvider(),
             NovelFullProvider(),
-            NovelPhoenixProvider(),
             NovelLightProvider(),
             NovelManiaProvider(),
             //NovelPassionProvider(), // Site gone

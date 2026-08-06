@@ -146,7 +146,7 @@ data class ImmutableReview @OptIn(ExperimentalUuidApi::class) constructor(
     val username: String? = null,
     val date: String? = null,
     val avatarUrl: String? = null,
-    val avatarHeaders: PersistentMap<String, String>,
+    val avatarHeaders: PersistentMap<String, String>? = null,
     val rating: Int? = null,
     val ratings: PersistentList<Pair<Int, String>>? = null,
     val randomUuid: Uuid = Uuid.random()
@@ -160,11 +160,31 @@ data class ImmutableReview @OptIn(ExperimentalUuidApi::class) constructor(
                 username = review.username,
                 date = review.reviewDate,
                 avatarUrl = review.avatarUrl,
-                avatarHeaders = persistentMapOf(),
+                avatarHeaders = review.avatarHeaders?.toPersistentMap(),
                 rating = review.rating,
                 ratings = review.ratings?.toPersistentList(),
             )
     }
+
+    val imageRequest
+        get() = @Composable {
+            val context = LocalContext.current
+            remember(context) {
+                ImageRequest(context)
+            }
+        }
+
+    fun ImageRequest(context: Context): ImageRequest =
+        ImageRequest.Builder(context)
+            .data(avatarUrl)
+            .httpHeaders(NetworkHeaders.Builder().also { headerBuilder ->
+                avatarHeaders?.forEach { (key, value) ->
+                    headerBuilder[key] = value
+                }
+            }.build())
+            .crossfade(true)
+            .build()
+
 }
 
 @Immutable
@@ -174,7 +194,6 @@ data class ImmutableLoadData(
     val chapters: PersistentList<ImmutableChapterData>?,
     val views: Int?,
     val peopleVoted: Int?,
-    val reviews: PersistentList<ImmutableReview>,
 
     // TODO make this better
     var downloadLinks: PersistentList<DownloadLink>?,
@@ -314,7 +333,6 @@ data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
                 peopleVoted = 42,
                 downloadLinks = null,
                 downloadExtractLinks = null,
-                reviews = persistentListOf(),
             ),
             tags = persistentListOf(
                 "tag 1",
@@ -437,7 +455,6 @@ data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
                     downloadExtractLinks = epubResponse?.downloadExtractLinks?.toPersistentList(),
                     views = response.views,
                     peopleVoted = response.peopleVoted,
-                    reviews = persistentListOf()
                 ),
                 tags = response.tags?.toPersistentList(),
                 posterHeaders = response.posterHeaders?.toImmutableMap(),
@@ -498,6 +515,7 @@ data class ImmutableSearchResponse @ExperimentalUuidApi constructor(
             SearchResponseOperation.Metadata -> {
                 MainActivity.loadPreviewPage(this)
             }
+
             SearchResponseOperation.NoOp -> {}
             else -> throw NotImplementedError()
         }
@@ -551,16 +569,17 @@ data class ImmutableDownloadState(
     }
 
     /** Get the associated action */
-    val operation get() =
-        when (status) {
-            DownloadState.IsDownloading -> SearchResponseOperation.Pause
-            DownloadState.IsPaused -> SearchResponseOperation.Resume
-            DownloadState.IsStopped -> SearchResponseOperation.Download
-            DownloadState.IsFailed -> SearchResponseOperation.Download
-            DownloadState.IsDone -> SearchResponseOperation.Download
-            DownloadState.IsPending -> SearchResponseOperation.NoOp
-            DownloadState.Nothing -> SearchResponseOperation.Download
-        }
+    val operation
+        get() =
+            when (status) {
+                DownloadState.IsDownloading -> SearchResponseOperation.Pause
+                DownloadState.IsPaused -> SearchResponseOperation.Resume
+                DownloadState.IsStopped -> SearchResponseOperation.Download
+                DownloadState.IsFailed -> SearchResponseOperation.Download
+                DownloadState.IsDone -> SearchResponseOperation.Download
+                DownloadState.IsPending -> SearchResponseOperation.NoOp
+                DownloadState.Nothing -> SearchResponseOperation.Download
+            }
 
 }
 

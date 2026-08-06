@@ -1009,6 +1009,7 @@ class ReadActivityViewModel : ViewModel() {
             val currentSettings = mlSettings
             if (rawHtml.isBlank() || currentSettings.isInvalid()) return rawHtml
 
+
             val textHash = hashString(rawHtml.trim().toByteArray())
             val agentSuffix = currentSettings.agent.title.ifEmpty { "" }
             val filePrefix = "ml_${textHash}.${currentSettings.from}_to_${currentSettings.to}.$agentSuffix"
@@ -1035,6 +1036,7 @@ class ReadActivityViewModel : ViewModel() {
             ) { progress, total ->
                 loading.invoke(Triple(chapterIndex, progress, total))
             }
+
 
             // Write to cache
             safe {

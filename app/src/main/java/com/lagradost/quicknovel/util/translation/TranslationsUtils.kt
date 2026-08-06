@@ -6,7 +6,7 @@ import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
 
 object TranslationsUtils {
-    const val TAG_DELIMITER = "\n\n\n\n\n\n560954723896594867098703702496\n\n\n\n\n\n"
+    const val TAG_DELIMITER = "\n\n\n\nKJHHYQ3TVI4FPHT\n\n\n\n"
 
     fun htmlToTranslatableList(node: Node, out: MutableList<String>) {
         if (node is Element) {
@@ -121,4 +121,10 @@ object TranslationsUtils {
             Triple("%s", html, emptyList())
         }
     }
+
+    fun sanitize(text: String): String {
+        // Remove zero-width spaces, marks and other non-printable control characters
+        return text.replace(Regex("[\u200B-\u200F\uFEFF]"), "")
+    }
+
 }

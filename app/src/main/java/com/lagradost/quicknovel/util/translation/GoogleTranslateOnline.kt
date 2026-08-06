@@ -13,13 +13,13 @@ import kotlin.math.pow
 
 class GoogleTranslateOnline(
     private val client: Requests,
-    private val charsLimit: Int = 5000
+    private val charsLimit: Int = 2500
 ) {
     data class FragmentMeta(val shell: String, val content: String, val originalIndex: Int, val tags: List<String>)
 
     companion object {
         private const val BASEURL = "https://translate.googleapis.com/translate_a/single?client=gtx&sl="
-        private const val PARAGRAPH_DELIMITER = "\n\n\n\n\n\nFDHJEJHGYRSTJFDGLKDFGJREWY\n\n\n\n\n\n"
+        private const val PARAGRAPH_DELIMITER = "\n\n\n\nFDHJEJHGYRSTJFDGLKDFGJREWY\n\n\n\n"
         private val paragraphsSeparatorRegex = Regex("\\n?FDHJEJHGYRSTJFDGLKDFGJREWY\\n?")
     }
 
@@ -110,15 +110,17 @@ class GoogleTranslateOnline(
             } else {
                 if (isHtml) {
                     val (shell, content, tags) = TranslationsUtils.extractDeepShell(text)
-                    contentFragments.add(FragmentMeta(shell, content, index, tags))
+                    val sanitizedContent = TranslationsUtils.sanitize(content)
+                    contentFragments.add(FragmentMeta(shell, sanitizedContent, index, tags))
                 } else {
-                    contentFragments.add(FragmentMeta("%s", text, index, emptyList()))
+                    val sanitizedText = TranslationsUtils.sanitize(text)
+                    contentFragments.add(FragmentMeta("%s", sanitizedText, index, emptyList()))
                 }
             }
         }
 
         if (contentFragments.isNotEmpty()) {
-            val chunks = contentFragments.chunkByLimitMeta()
+            val chunks = contentFragments.chunkByLimit()
             chunks.forEachIndexed { i, chunk ->
                 loading.invoke(i, chunks.size)
 
@@ -171,7 +173,7 @@ class GoogleTranslateOnline(
     }
 
     private suspend fun callGoogleTranslateApi(text: String, from: String, to: String) =
-        client.get("$BASEURL$from&tl=$to&dt=t&ie=UTF-8&oe=UTF-8&q=${Uri.encode(text)}")
+        client.get("$BASEURL$from&tl=$to&dt=t&q=${Uri.encode(text)}")
             .parsed<GoogleTranslationResponse>()
 
     private suspend fun translateChunk(
@@ -199,14 +201,14 @@ class GoogleTranslateOnline(
         return text
     }
 
-    private fun List<FragmentMeta>.chunkByLimitMeta(): List<List<FragmentMeta>> {
+    private fun List<FragmentMeta>.chunkByLimit(): List<List<FragmentMeta>> {
         if (this.isEmpty()) return emptyList()
         val chunks = mutableListOf<List<FragmentMeta>>()
         var currentChunk = mutableListOf<FragmentMeta>()
         var currentLength = 0
 
         for (item in this) {
-            val itemLength = item.content.length + PARAGRAPH_DELIMITER.length
+            val itemLength = Uri.encode(item.content + PARAGRAPH_DELIMITER).length
             if (currentChunk.isNotEmpty() && currentLength + itemLength > charsLimit) {
                 chunks.add(currentChunk)
                 currentChunk = mutableListOf()

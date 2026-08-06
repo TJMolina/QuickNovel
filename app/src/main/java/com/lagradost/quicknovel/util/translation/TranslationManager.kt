@@ -143,7 +143,8 @@ class TranslationManager {
             }
 
             TranslatorAgent.GEMINI -> {
-                val result = geminiTranslator.translate(textList, from, to, isHtml, progress)
+                val result = onlineTranslator.translate(textList, from, to, isHtml, progress)
+                //val result = geminiTranslator.translate(textList, from, to, isHtml, progress)
                 onlineTranslator.fixFailures(result, from, to, isHtml = isHtml)
             }
         }
@@ -158,15 +159,16 @@ class TranslationManager {
     ): List<String> {
         val client = translator ?: prepareModel(from, to) ?: throw Exception("Offline model not available")
         return textList.mapIndexed { index, text ->
+            val sanitizedText = TranslationsUtils.sanitize(text)
             val isTranslatable = if (isHtml) {
-                val plainText = Jsoup.parse(text).text()
+                val plainText = Jsoup.parse(sanitizedText).text()
                 plainText.isNotBlank() && plainText.any { it.isLetter() }
             } else {
-                text.trim().any { it.isLetter() }
+                sanitizedText.trim().any { it.isLetter() }
             }
-            if (!isTranslatable) return@mapIndexed text
+            if (!isTranslatable) return@mapIndexed sanitizedText
             progress(index + 1, textList.size)
-            Tasks.await(client.translate(text))
+            Tasks.await(client.translate(sanitizedText))
         }
     }
 

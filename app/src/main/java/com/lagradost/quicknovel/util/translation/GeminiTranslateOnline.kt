@@ -42,17 +42,18 @@ class GeminiTranslateOnline(
         val contentIndices = mutableListOf<Int>()
 
         originalText.forEachIndexed { index, text ->
+            val sanitizedText = TranslationsUtils.sanitize(text)
             val isTranslatable = if (isHtml) {
-                val plainText = Jsoup.parse(text).text()
+                val plainText = Jsoup.parse(sanitizedText).text()
                 plainText.isNotBlank() && plainText.any { it.isLetter() }
             } else {
-                text.isNotBlank() && text.any { it.isLetter() }
+                sanitizedText.isNotBlank() && sanitizedText.any { it.isLetter() }
             }
 
             if (!isTranslatable) {
-                allTranslatedLines[index] = text
+                allTranslatedLines[index] = sanitizedText
             } else {
-                contentParagraphs.add(text)
+                contentParagraphs.add(sanitizedText)
                 contentIndices.add(index)
             }
         }
@@ -61,7 +62,7 @@ class GeminiTranslateOnline(
             return TranslationResult(allTranslatedLines.toList(), emptyList())
         }
 
-        val chunks = splitTextOptimized(contentParagraphs, MAX_CHARS_PER_CHUNK)
+        val chunks = chunkByLimit(contentParagraphs, MAX_CHARS_PER_CHUNK)
         var contentPointer = 0
 
         chunks.forEachIndexed { index, chunkLines ->
@@ -186,7 +187,7 @@ class GeminiTranslateOnline(
     /**
      * Logic to group lines into blocks to minimize API calls.
      */
-    private fun splitTextOptimized(lines: List<String>, limit: Int): List<List<String>> {
+    private fun chunkByLimit(lines: List<String>, limit: Int): List<List<String>> {
         val chunks = mutableListOf<List<String>>()
         var current = mutableListOf<String>()
         var count = 0

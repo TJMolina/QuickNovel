@@ -5,6 +5,7 @@ import com.lagradost.quicknovel.util.translation.models.FailedContext
 import com.lagradost.quicknovel.util.translation.models.GeminiTranslationResponse
 import com.lagradost.quicknovel.util.translation.models.TranslationResult
 import kotlinx.coroutines.delay
+import org.jsoup.Jsoup
 import java.net.UnknownHostException
 
 
@@ -25,11 +26,11 @@ class GeminiTranslateOnline(
         private val MODELS = listOf("gemini-3.1-flash-lite")
     }
 
-
     suspend fun translate(
         originalText: List<String>,
         sourceLanguage: String = "Auto-detect",
         targetLanguage: String = "English",
+        isHtml: Boolean = false,
         progress: suspend (Int, Int) -> Unit = { _, _ -> }
     ): TranslationResult {
         if (originalText.isEmpty()) return TranslationResult(emptyList(), emptyList())
@@ -41,7 +42,14 @@ class GeminiTranslateOnline(
         val contentIndices = mutableListOf<Int>()
 
         originalText.forEachIndexed { index, text ->
-            if (text.isBlank() || !text.any { it.isLetter() }) {
+            val isTranslatable = if (isHtml) {
+                val plainText = Jsoup.parse(text).text()
+                plainText.isNotBlank() && plainText.any { it.isLetter() }
+            } else {
+                text.isNotBlank() && text.any { it.isLetter() }
+            }
+
+            if (!isTranslatable) {
                 allTranslatedLines[index] = text
             } else {
                 contentParagraphs.add(text)
@@ -59,7 +67,7 @@ class GeminiTranslateOnline(
         chunks.forEachIndexed { index, chunkLines ->
             progress(index, chunks.size)
 
-            val result = recursiveTranslate(chunkLines, sourceLanguage, targetLanguage)
+            val result = recursiveTranslate(chunkLines, sourceLanguage, targetLanguage, isHtml)
 
             result.forEach { (isSuccess, translatedText) ->
                 if (contentPointer < contentIndices.size) {
@@ -68,7 +76,6 @@ class GeminiTranslateOnline(
                     if (isSuccess) {
                         allTranslatedLines[originalGlobalIndex] = translatedText
                     } else {
-                        // Si falló, guardamos el original y marcamos el contexto
                         failedContexts.add(FailedContext(originalGlobalIndex, translatedText))
                         allTranslatedLines[originalGlobalIndex] = "[TRANSLATION_FAILED]"
                     }
@@ -86,11 +93,12 @@ class GeminiTranslateOnline(
     private suspend fun recursiveTranslate(
         lines: List<String>,
         source: String,
-        target: String
+        target: String,
+        isHtml: Boolean
     ): List<Pair<Boolean, String>> {
         return try {
             // Try to translate the entire block at once
-            val translated = callGeminiWithRetry(lines.joinToString("\n"), source, target)
+            val translated = callGeminiWithRetry(lines.joinToString("\n"), source, target, isHtml)
             val translatedLines = translated.lines().filter { it.isNotBlank() }
 
             // If successful, split the response back into individual lines
@@ -112,8 +120,8 @@ class GeminiTranslateOnline(
 
                     // It processes the left part, then the right part, and joins them (+).
                     // This structure physically forces the original order to be maintained.
-                    recursiveTranslate(leftHalf, source, target) +
-                            recursiveTranslate(rightHalf, source, target)
+                    recursiveTranslate(leftHalf, source, target, isHtml) +
+                            recursiveTranslate(rightHalf, source, target, isHtml)
                 }
                 //CONNECTION ERROR
                 is UnknownHostException -> throw e
@@ -129,7 +137,7 @@ class GeminiTranslateOnline(
     /**
      * Handles the network request, model fallback, and retries (429 errors).
      */
-    private suspend fun callGeminiWithRetry(text: String, source: String, target: String): String {
+    private suspend fun callGeminiWithRetry(text: String, source: String, target: String, isHtml: Boolean): String {
         var lastError: Exception? = null
 
         for (model in MODELS) {
@@ -137,10 +145,9 @@ class GeminiTranslateOnline(
                 try {
                     val res = client.post(
                         url = "$BASE_URL$model:generateContent",
-                        json = buildRequestBody(text, source, target),
+                        json = buildRequestBody(text, source, target, isHtml = isHtml),
                         headers = mapOf("X-Goog-API-Key" to apiKey)
                     ).parsed<GeminiTranslationResponse>()
-
                     if(res.error != null){
                         //rate limit error
                         if (res.error.code == 429) {
@@ -203,7 +210,8 @@ class GeminiTranslateOnline(
         text: String,
         sourceLanguage: String,
         targetLanguage: String,
-        glossary: String = ""
+        glossary: String = "",
+        isHtml: Boolean = false
     ): Map<String, Any> {
         val promptText = """
             [LITERARY PRESERVATION TASK]
@@ -212,6 +220,18 @@ class GeminiTranslateOnline(
             TEXT:
             $text
         """.trimIndent()
+
+        val htmlInstruction = if (isHtml) """
+            5. HTML TAG PRESERVATION (STRICT):
+            - The text contains HTML tags (e.g., <b>, <i>, <p>, <h1>).
+            - You MUST preserve these tags exactly as they are in the translated text.
+            - DO NOT translate the tags themselves (e.g., keep <b>, do not write <negrita>).
+            - DO NOT remove, modify, or "clean up" the tags.
+            - Ensure the tags surround the equivalent translated words.
+            - Example Input: <h1>The Dragon</h1>
+            - Example Output: <h1>El Dragón</h1>
+        """.trimIndent() else ""
+
         val systemInstruction = """
             Act as a professional literary translator with extensive experience in localizing web novels, 
             light novels, and fiction literature. Your goal is to translate the user's text while maintaining 
@@ -242,13 +262,14 @@ class GeminiTranslateOnline(
               plot without being purely explicit. ONLY do this if absolutely necessary; if possible, 
               maintain the intensity.
               
-            4. OUTPUT FORMAT AND STRUCTURE (CRITICAL):
-            - MANDATORY: You MUST return exactly the same number of paragraphs as the source text. 
-            - ONE-TO-ONE MAPPING: Each individual line/paragraph in the source MUST correspond to exactly one line/paragraph in the translation.
-            - NO MERGING: Never merge two or more paragraphs into one, even if they are very short or logically connected. 
-            - NO SPLITTING: Do not split a single paragraph into multiple ones.
+            4. OUTPUT STRUCTURE (CRITICAL):
+            - ONE-TO-ONE MAPPING: Each individual line in the source MUST correspond to exactly one line in the translation.
+            - NO MERGING: Never merge two or more lines into one. 
+            - NO SPLITTING: Do not split a single line into multiple ones.
             - NO ADDITIONS: Return ONLY the translated text. Do not include introductions, "Here is the translation", translator notes, apologies, or any metadata. 
             - FAILURE CRITERIA: If the source has 10 lines, the output MUST have 10 lines. Any variation in the line count is a failure of your task.
+            
+            $htmlInstruction
 
         """.trimIndent()
 

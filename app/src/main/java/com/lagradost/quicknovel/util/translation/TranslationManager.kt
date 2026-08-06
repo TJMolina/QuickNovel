@@ -15,10 +15,11 @@ import com.lagradost.quicknovel.util.translation.models.TranslatorAgent
 import com.lagradost.safefile.closeQuietly
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-//
+import org.jsoup.Jsoup
+
 class TranslationManager {
     private val geminiTranslator = GeminiTranslateOnline(
-        apiKey = "",
+        apiKey = "AQ.Ab8RN6IKt03VobKjixAWmr3OhulY9E9MTtXjz5CjhM_vZRhuWA",
         client = MainActivity.app
     )
 
@@ -62,6 +63,7 @@ class TranslationManager {
             return@withContext false
         }
     }
+
     suspend fun prepareModel(from: String, to: String): Translator? {
         try {
             if (translator != null && currentFrom == from && currentTo == to) {
@@ -92,8 +94,37 @@ class TranslationManager {
         }
     }
 
+    /**
+     * Translates a single string. If isHtml is true, it will split, translate fragments, and join.
+     */
+    suspend fun translate(
+        text: String,
+        isHtml: Boolean = false,
+        progress: suspend (Int, Int) -> Unit = { _, _ -> }
+    ): String {
+        if (text.isBlank()) return text
+        
+        return if (isHtml) {
+            val doc = Jsoup.parse(text)
+            val fragments = mutableListOf<String>()
+            TranslationsUtils.htmlToTranslatableList(doc.body(), fragments)
+            
+            if (fragments.isEmpty()) return text
+            
+            val translatedList = translate(textList = fragments, isHtml = true, progress = progress)
+            translatedList.joinToString("<br>\n")
+        } else {
+            val result = translate(listOf(text), false, progress)
+            result.firstOrNull() ?: text
+        }
+    }
+
+    /**
+     * Translates a list of strings.
+     */
     suspend fun translate(
         textList: List<String>,
+        isHtml: Boolean = false,
         progress: suspend (Int, Int) -> Unit = { _, _ -> },
     ): List<String> {
         if (textList.isEmpty()) return emptyList()
@@ -103,17 +134,17 @@ class TranslationManager {
 
         return when (currentAgent) {
             TranslatorAgent.ONLINE -> {
-                val result = onlineTranslator.translate(textList, from, to, progress)
-                onlineTranslator.fixFailures(result, from, to)
+                val result = onlineTranslator.translate(textList, from, to, isHtml, progress)
+                onlineTranslator.fixFailures(result, from, to, isHtml = isHtml)
             }
 
             TranslatorAgent.OFFLINE -> {
-                offlineTranslate(textList, from, to, progress)
+                offlineTranslate(textList, from, to, isHtml, progress)
             }
 
             TranslatorAgent.GEMINI -> {
-                val result = geminiTranslator.translate(textList, from, to, progress)
-                onlineTranslator.fixFailures(result, from, to)
+                val result = geminiTranslator.translate(textList, from, to, isHtml, progress)
+                onlineTranslator.fixFailures(result, from, to, isHtml = isHtml)
             }
         }
     }
@@ -122,11 +153,18 @@ class TranslationManager {
         textList: List<String>,
         from: String,
         to: String,
+        isHtml: Boolean = false,
         progress: suspend (Int, Int) -> Unit
     ): List<String> {
         val client = translator ?: prepareModel(from, to) ?: throw Exception("Offline model not available")
         return textList.mapIndexed { index, text ->
-            if (!text.trim().any { it.isLetter() }) return@mapIndexed text
+            val isTranslatable = if (isHtml) {
+                val plainText = Jsoup.parse(text).text()
+                plainText.isNotBlank() && plainText.any { it.isLetter() }
+            } else {
+                text.trim().any { it.isLetter() }
+            }
+            if (!isTranslatable) return@mapIndexed text
             progress(index + 1, textList.size)
             Tasks.await(client.translate(text))
         }

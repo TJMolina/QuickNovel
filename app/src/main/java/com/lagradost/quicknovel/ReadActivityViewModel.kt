@@ -15,6 +15,7 @@ import android.widget.Toast
 import androidx.annotation.WorkerThread
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.graphics.toColorInt
+import androidx.core.text.HtmlCompat
 import androidx.core.text.getSpans
 import androidx.core.text.toSpanned
 import androidx.lifecycle.LiveData
@@ -63,6 +64,7 @@ import com.lagradost.quicknovel.util.CoilImagesPlugin.CoilStore
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.Coroutines.runOnMainThread
 import com.lagradost.quicknovel.util.translation.TranslationManager
+import com.lagradost.quicknovel.util.translation.TranslationsUtils
 import com.lagradost.quicknovel.util.translation.models.TranslatorAgent
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
@@ -90,6 +92,8 @@ import me.ag2s.epublib.epub.EpubReader
 import me.ag2s.epublib.util.zip.AndroidZipFile
 import org.commonmark.node.Node
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
+import org.jsoup.nodes.TextNode
 import java.io.File
 import java.io.InputStream
 import java.net.URLDecoder
@@ -900,25 +904,42 @@ class ReadActivityViewModel : ViewModel() {
             val dataResource = safeApiCall {
                 book.getChapterData(index, reload)
             }
-            
+
             val data = dataResource.map { text ->
                 val rawText = preParseHtml(text, authorNotes)
                 // val renderedBuilder = SpannableStringBuilder()
                 // val lengths : IntArray
                 // val nodes : Array<Node>
+
+                // done on raw HTML to preserve styles
+                val translatedHtml = translate(
+                    rawText,
+                    index
+                )
+                { (progressChapter, progressInnerIndex, progressInnerTotal) ->
+                    val progressText =
+                        "${context?.getString(R.string.translating)} ${
+                            book.getChapterTitle(progressChapter)
+                        } ($progressInnerIndex/$progressInnerTotal)"
+                    if (postLoading) {
+                        _loadingStatus.postValue(Resource.Loading(progressText))
+                    } else {
+                        chapterMutex.withLock {
+                            chapterData[index] = Resource.Loading(progressText)
+                            if (notify) notifyChapterUpdate(index)
+                        }
+                    }
+                }
+
                 val parsed: Node
-                var rendered: Spanned
-                val originalRendered: Spanned
-                val originalSpans: ArrayList<TextSpan>
-                var spans: ArrayList<TextSpan>
+                val rendered: Spanned
+                val spans: ArrayList<TextSpan>
 
                 markwonMutex.withLock {
-                    parsed = markwon.parse(rawText)
+                    parsed = markwon.parse(translatedHtml)
                     rendered = markwon.render(parsed)
 
                     spans = parseTextToSpans(rendered, index)
-                    originalSpans = spans
-                    originalRendered = rendered
 
                     val asyncDrawables = rendered.getSpans<AsyncDrawableSpan>()
                     for (async in asyncDrawables) {
@@ -929,38 +950,12 @@ class ReadActivityViewModel : ViewModel() {
                     }
                 }
 
-                // translation may strip stuff, idk how to solve that in a clean way atm
-                // translate outside markwonMutex to allow multiple translations or rendering in parallel
-                translate(
-                    rendered,
-                    spans
-                ) { (progressChapter, progressInnerIndex, progressInnerTotal) ->
-                    val progressText =
-                        "${context?.getString(R.string.translating)} ${
-                            book.getChapterTitle(
-                                progressChapter
-                            )
-                        } ($progressInnerIndex/$progressInnerTotal)"
-                    if (postLoading) {
-                        _loadingStatus.postValue(Resource.Loading(progressText))
-                    } else {
-                        chapterMutex.withLock {
-                            chapterData[index] =
-                                Resource.Loading(progressText)
-                            if (notify) notifyChapterUpdate(index)
-                        }
-                    }
-                }.let { (mlRender, mlSpans) ->
-                    rendered = mlRender
-                    spans = mlSpans
-                }
-
                 LiveChapterData(
                     index = index,
                     rendered = rendered,
                     spans = spans,
-                    originalRendered = originalRendered,
-                    originalSpans = originalSpans,
+                    originalRendered = rendered,
+                    originalSpans = spans,
                     rawText = rawText,
                     title = book.getChapterTitle(index),
                 )
@@ -1004,83 +999,54 @@ class ReadActivityViewModel : ViewModel() {
         return sb.toString()
     }
 
-    private fun getFinalTranslatedText(spans: ArrayList<TextSpan>, translatedLines: List<String>):Pair<SpannableStringBuilder, ArrayList<TextSpan>>{
-        val builder = SpannableStringBuilder()
-        val out = ArrayList<TextSpan>()
-        spans.forEachIndexed { i, originalSpan ->
-            val hasImage = originalSpan.text.getSpans<AsyncDrawableSpan>().isNotEmpty()
-            val finalText =
-                if (hasImage)
-                    originalSpan.text
-                else
-                    (translatedLines.getOrNull(i)?: return@forEachIndexed).toSpanned()
-            val start = builder.length
-            builder.append(finalText)
-            val end = builder.length
-            builder.append('\n')
-            out.add(TextSpan(finalText, start, end, originalSpan.index, originalSpan.innerIndex))
-        }
-        return builder to out
-    }
-
-
     @Throws(MLException::class)
     private suspend fun translate(
-        text: Spanned,
-        spans: ArrayList<TextSpan>,
+        rawHtml: String,
+        chapterIndex: Int,
         loading: suspend (Triple<Int, Int, Int>) -> Unit
-    ): Pair<Spanned, ArrayList<TextSpan>> {
+    ): String {
         try {
             val currentSettings = mlSettings
-            if (spans.isEmpty() || currentSettings.isInvalid()) return text to spans
-            val textHash = hashString(
-                text.trim().toString().toByteArray()
-            )
+            if (rawHtml.isBlank() || currentSettings.isInvalid()) return rawHtml
 
-            val agentSuffix = if (currentSettings.agent.title.isNotEmpty()) currentSettings.agent.title else ""
-
-            //the file
-            val filePrefix =
-                "ml_${textHash}.${currentSettings.from}_to_${currentSettings.to}.$agentSuffix"
+            val textHash = hashString(rawHtml.trim().toByteArray())
+            val agentSuffix = currentSettings.agent.title.ifEmpty { "" }
+            val filePrefix = "ml_${textHash}.${currentSettings.from}_to_${currentSettings.to}.$agentSuffix"
 
             translationManager.setSettings(currentSettings.from, currentSettings.to, currentSettings.agent)
 
             // read from cache if it exists
-            // we assume that parseTextToSpans is equivalent from restoring from the builder
-            // aka out == parseTextToSpans(builder)
-            val cachedData = safe {
+            val cachedHtml = safe {
                 context?.cacheDir?.let { dir ->
                     val cache = File(dir, "$filePrefix.txt")
                     if (cache.exists()) {
                         Log.i(TAG, "Cache exists for $filePrefix")
-                        val lines = cache.readLines()
-                        return@safe getFinalTranslatedText(spans, lines)
+                        return@safe cache.readText()
                     }
                 }
                 return@safe null
             }
-            if(cachedData != null) return cachedData
+            if (cachedHtml != null) return cachedHtml
 
-            val translatedList = translationManager.translate(
-                textList = spans.map { it.text.toString() }
+            // Now TranslationManager handles the splitting and batching!
+            val translatedHtml = translationManager.translate(
+                text = rawHtml,
+                isHtml = true
             ) { progress, total ->
-                loading.invoke(Triple(spans[0].index, progress, total))
+                loading.invoke(Triple(chapterIndex, progress, total))
             }
 
-
-            val (builder, out) = getFinalTranslatedText(spans, translatedList)
-
-            // atomically write the file by rename
+            // Write to cache
             safe {
                 context?.cacheDir?.let {
                     val cache = File(it, "$filePrefix.tmp")
-                    cache.writeText(builder.toString())
-                    safe { File(it, "$filePrefix.txt").delete() } // just in case
+                    cache.writeText(translatedHtml)
+                    safe { File(it, "$filePrefix.txt").delete() }
                     cache.renameTo(File(it, "$filePrefix.txt"))
                 }
             }
 
-            return builder to out
+            return translatedHtml
         } catch (t: Throwable) {
             throw MLException(t)
         }
@@ -1127,9 +1093,9 @@ class ReadActivityViewModel : ViewModel() {
                 val success = value.value
 
                 try {
-                    translate(
-                        success.originalRendered,
-                        success.originalSpans
+                    val translatedHtml = translate(
+                        success.rawText,
+                        success.index
                     ) { (progressChapter, progressInnerIndex, progressInnerTotal) ->
                         _loadingStatus.postValue(
                             Resource.Loading(
@@ -1140,12 +1106,18 @@ class ReadActivityViewModel : ViewModel() {
                                 } ($progressInnerIndex/$progressInnerTotal)"
                             )
                         )
-                    }.let { (mlRender, mlSpans) ->
+                    }
+                    
+                    markwonMutex.withLock {
+                        val parsed = markwon.parse(translatedHtml)
+                        val rendered = markwon.render(parsed)
+                        val spans = parseTextToSpans(rendered, success.index)
+
                         entry.setValue(
                             Resource.Success(
                                 success.copy(
-                                    rendered = mlRender,
-                                    spans = mlSpans,
+                                    rendered = rendered,
+                                    spans = spans,
                                 )
                             )
                         )

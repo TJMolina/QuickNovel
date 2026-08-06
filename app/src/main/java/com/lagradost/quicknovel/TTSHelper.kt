@@ -573,6 +573,13 @@ object TTSHelper {
             document.select("div.qnauthornotecontainer").remove()
         }
 
+        // Normalize empty paragraphs to ensure they take up space
+        document.select("p").forEach { p ->
+            if (p.text().isBlank() && p.children().isEmpty()) {
+                p.html("&nbsp;")
+            }
+        }
+
         return document.html()
             // this makes tables readable, more or less places a newline between rows
             // and space between columns

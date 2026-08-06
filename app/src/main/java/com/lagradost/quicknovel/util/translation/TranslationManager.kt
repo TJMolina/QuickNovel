@@ -34,15 +34,14 @@ class TranslationManager {
      * Configura los idiomas y el agente activo.
      */
     fun setSettings(from: String, to: String, agent: TranslatorAgent) {
-        if (currentFrom != from || currentTo != to || currentAgent != agent) {
-            currentFrom = from
-            currentTo = to
-            currentAgent = agent
+        if (currentFrom == from && currentTo == to && currentAgent == agent) return
 
-            if (agent != TranslatorAgent.OFFLINE) {
-                translator?.closeQuietly()
-                translator = null
-            }
+        currentFrom = from
+        currentTo = to
+        currentAgent = agent
+
+        if (agent != TranslatorAgent.OFFLINE) {
+            releaseOffline()
         }
     }
 
@@ -143,8 +142,7 @@ class TranslationManager {
             }
 
             TranslatorAgent.GEMINI -> {
-                val result = onlineTranslator.translate(textList, from, to, isHtml, progress)
-                //val result = geminiTranslator.translate(textList, from, to, isHtml, progress)
+                val result = geminiTranslator.translate(textList, from, to, isHtml, progress)
                 onlineTranslator.fixFailures(result, from, to, isHtml = isHtml)
             }
         }
@@ -159,22 +157,20 @@ class TranslationManager {
     ): List<String> {
         val client = translator ?: prepareModel(from, to) ?: throw Exception("Offline model not available")
         return textList.mapIndexed { index, text ->
-            val sanitizedText = TranslationsUtils.sanitize(text)
-            val isTranslatable = if (isHtml) {
-                val plainText = Jsoup.parse(sanitizedText).text()
-                plainText.isNotBlank() && plainText.any { it.isLetter() }
-            } else {
-                sanitizedText.trim().any { it.isLetter() }
-            }
-            if (!isTranslatable) return@mapIndexed sanitizedText
+            if (!TranslationsUtils.isTranslatable(text, isHtml)) return@mapIndexed text
+            
             progress(index + 1, textList.size)
-            Tasks.await(client.translate(sanitizedText))
+            Tasks.await(client.translate(TranslationsUtils.sanitize(text)))
         }
     }
 
-    fun release() {
+    private fun releaseOffline() {
         translator?.closeQuietly()
         translator = null
+    }
+
+    fun release() {
+        releaseOffline()
         currentFrom = null
         currentTo = null
     }

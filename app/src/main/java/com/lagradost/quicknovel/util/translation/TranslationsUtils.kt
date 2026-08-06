@@ -7,20 +7,22 @@ import org.jsoup.nodes.TextNode
 
 object TranslationsUtils {
     const val TAG_DELIMITER = "\n\n\n\nKJHHYQ3TVI4FPHT\n\n\n\n"
+    private val leafTags = setOf("img", "hr", "br")
+    private val blockTags = setOf("p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "tr", "td", "th")
+    private val containerTags = setOf("div", "main", "section", "article", "body", "table", "tbody", "ul", "ol", "center")
+    private val structuralTags = setOf("p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "center")
 
     fun htmlToTranslatableList(node: Node, out: MutableList<String>) {
         if (node is Element) {
             val tagName = node.tagName().lowercase()
 
             // Atomic Content (Leaf tags)
-            val leafTags = setOf("img", "hr", "br")
             if (leafTags.contains(tagName)) {
                 out.add(node.outerHtml())
                 return
             }
 
             // Unit of translation. We go inside only if there are nested BLOCKS or BRs.
-            val blockTags = setOf("p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "tr", "td", "th")
             if (blockTags.contains(tagName)) {
                 // Check if it has internal structure that SHOULD be separated (like <br>)
                 val hasSeparators = node.childNodes().any {
@@ -36,7 +38,6 @@ object TranslationsUtils {
             }
 
             // Container tags: Always go inside
-            val containerTags = setOf("div", "main", "section", "article", "body", "table", "tbody", "ul", "ol", "center")
             if (containerTags.contains(tagName)) {
                 processChildrenGroupingInline(node, out)
                 return
@@ -85,7 +86,6 @@ object TranslationsUtils {
     }
 
     fun extractDeepShell(html: String): Triple<String, String, List<String>> {
-        val structuralTags = setOf("p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "center")
         return try {
             val doc = Jsoup.parseBodyFragment(html)
             val body = doc.body()
@@ -127,4 +127,14 @@ object TranslationsUtils {
         return text.replace(Regex("[\u200B-\u200F\uFEFF]"), "")
     }
 
+    fun isTranslatable(text: String, isHtml: Boolean): Boolean {
+        if (text.isBlank()) return false
+        val sanitized = sanitize(text)
+        return if (isHtml) {
+            val plainText = Jsoup.parse(sanitized).text()
+            plainText.isNotBlank() && plainText.any { it.isLetter() }
+        } else {
+            sanitized.trim().any { it.isLetter() }
+        }
+    }
 }

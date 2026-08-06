@@ -5,22 +5,22 @@ import com.lagradost.nicehttp.Requests
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.util.translation.models.FailedContext
 import com.lagradost.quicknovel.util.translation.models.GoogleTranslationResponse
+import com.lagradost.quicknovel.util.translation.models.OnlineTranslator
 import com.lagradost.quicknovel.util.translation.models.TranslationResult
 import kotlinx.coroutines.delay
-import org.jsoup.Jsoup
 import java.net.UnknownHostException
 import kotlin.math.pow
 
 class GoogleTranslateOnline(
-    private val client: Requests,
-    private val charsLimit: Int = 2500
-) {
+    private val client: Requests
+) : OnlineTranslator {
     data class FragmentMeta(val shell: String, val content: String, val originalIndex: Int, val tags: List<String>)
 
     companion object {
         private const val BASEURL = "https://translate.googleapis.com/translate_a/single?client=gtx&sl="
         private const val PARAGRAPH_DELIMITER = "\n\n\n\nFDHJEJHGYRSTJFDGLKDFGJREWY\n\n\n\n"
         private val paragraphsSeparatorRegex = Regex("\\n?FDHJEJHGYRSTJFDGLKDFGJREWY\\n?")
+        private const val MAX_CHARS_PER_CHUNK: Int = 2500
     }
 
     /**
@@ -45,7 +45,7 @@ class GoogleTranslateOnline(
         val textsToFix = translationResult.failedChunks.map { it.text }
         // Call the main translate function again, but ONLY for the failed texts
         // This returns a new TranslationResult which might still contain some failures
-        val retryResult = translate(textsToFix, from, to, isHtml = isHtml)
+        val retryResult = translate(textsToFix, from, to, isHtml, { _, _ -> })
         // Create a mutable copy of the current translated lines to update them
         val finalLines = translationResult.translatedLines.toMutableList()
 
@@ -82,30 +82,23 @@ class GoogleTranslateOnline(
         return finalLines
     }
 
-    suspend fun translate(
-        paragraphs: List<String>,
+    override suspend fun translate(
+        textList: List<String>,
         from: String,
         to: String,
-        isHtml: Boolean = false,
-        loading: suspend (Int, Int) -> Unit = { _, _ -> }
+        isHtml: Boolean,
+        progress: suspend (Int, Int) -> Unit
     ): TranslationResult {
-        if (paragraphs.isEmpty()) return TranslationResult(emptyList(), emptyList())
+        if (textList.isEmpty()) return TranslationResult(emptyList(), emptyList())
 
-        val allTranslatedLines = Array(paragraphs.size) { "" }
+        val allTranslatedLines = Array(textList.size) { "" }
         val failedParagraphs = mutableListOf<FailedContext>()
 
         // Separate and extract shell (tags) from content
         val contentFragments = mutableListOf<FragmentMeta>()
 
-        paragraphs.forEachIndexed { index, text ->
-            val isTranslatable = if (isHtml) {
-                val plainText = Jsoup.parse(text).text()
-                plainText.isNotBlank() && plainText.any { it.isLetter() }
-            } else {
-                text.isNotBlank() && text.any { it.isLetter() }
-            }
-
-            if (!isTranslatable) {
+        textList.forEachIndexed { index, text ->
+            if (!TranslationsUtils.isTranslatable(text, isHtml)) {
                 allTranslatedLines[index] = text
             } else {
                 if (isHtml) {
@@ -122,7 +115,7 @@ class GoogleTranslateOnline(
         if (contentFragments.isNotEmpty()) {
             val chunks = contentFragments.chunkByLimit()
             chunks.forEachIndexed { i, chunk ->
-                loading.invoke(i, chunks.size)
+                progress.invoke(i, chunks.size)
 
                 val combinedText = chunk.joinToString(PARAGRAPH_DELIMITER) { it.content }
                 val translatedBatch = translateChunk(combinedText, from, to)
@@ -209,7 +202,7 @@ class GoogleTranslateOnline(
 
         for (item in this) {
             val itemLength = Uri.encode(item.content + PARAGRAPH_DELIMITER).length
-            if (currentChunk.isNotEmpty() && currentLength + itemLength > charsLimit) {
+            if (currentChunk.isNotEmpty() && currentLength + itemLength > MAX_CHARS_PER_CHUNK) {
                 chunks.add(currentChunk)
                 currentChunk = mutableListOf()
                 currentLength = 0

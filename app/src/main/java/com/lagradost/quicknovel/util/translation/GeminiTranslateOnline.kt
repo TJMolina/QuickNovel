@@ -3,9 +3,9 @@ import com.lagradost.nicehttp.Requests
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.util.translation.models.FailedContext
 import com.lagradost.quicknovel.util.translation.models.GeminiTranslationResponse
+import com.lagradost.quicknovel.util.translation.models.OnlineTranslator
 import com.lagradost.quicknovel.util.translation.models.TranslationResult
 import kotlinx.coroutines.delay
-import org.jsoup.Jsoup
 import java.net.UnknownHostException
 
 
@@ -17,7 +17,7 @@ class GeminiTranslationException(message: String) : Exception(message)
 class GeminiTranslateOnline(
     private val apiKey: String,
     private val client: Requests,
-) {
+) : OnlineTranslator {
     companion object {
         private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/"
         private const val MAX_CHARS_PER_CHUNK = 10000
@@ -26,34 +26,26 @@ class GeminiTranslateOnline(
         private val MODELS = listOf("gemini-3.1-flash-lite")
     }
 
-    suspend fun translate(
-        originalText: List<String>,
-        sourceLanguage: String = "Auto-detect",
-        targetLanguage: String = "English",
-        isHtml: Boolean = false,
-        progress: suspend (Int, Int) -> Unit = { _, _ -> }
+    override suspend fun translate(
+        textList: List<String>,
+        from: String,
+        to: String,
+        isHtml: Boolean,
+        progress: suspend (Int, Int) -> Unit
     ): TranslationResult {
-        if (originalText.isEmpty()) return TranslationResult(emptyList(), emptyList())
+        if (textList.isEmpty()) return TranslationResult(emptyList(), emptyList())
 
-        val allTranslatedLines = Array(originalText.size) { "" }
+        val allTranslatedLines = Array(textList.size) { "" }
         val failedContexts = mutableListOf<FailedContext>()
 
         val contentParagraphs = mutableListOf<String>()
         val contentIndices = mutableListOf<Int>()
 
-        originalText.forEachIndexed { index, text ->
-            val sanitizedText = TranslationsUtils.sanitize(text)
-            val isTranslatable = if (isHtml) {
-                val plainText = Jsoup.parse(sanitizedText).text()
-                plainText.isNotBlank() && plainText.any { it.isLetter() }
+        textList.forEachIndexed { index, text ->
+            if (!TranslationsUtils.isTranslatable(text, isHtml)) {
+                allTranslatedLines[index] = TranslationsUtils.sanitize(text)
             } else {
-                sanitizedText.isNotBlank() && sanitizedText.any { it.isLetter() }
-            }
-
-            if (!isTranslatable) {
-                allTranslatedLines[index] = sanitizedText
-            } else {
-                contentParagraphs.add(sanitizedText)
+                contentParagraphs.add(TranslationsUtils.sanitize(text))
                 contentIndices.add(index)
             }
         }
@@ -68,7 +60,7 @@ class GeminiTranslateOnline(
         chunks.forEachIndexed { index, chunkLines ->
             progress(index, chunks.size)
 
-            val result = recursiveTranslate(chunkLines, sourceLanguage, targetLanguage, isHtml)
+            val result = recursiveTranslate(chunkLines, from, to, isHtml)
 
             result.forEach { (isSuccess, translatedText) ->
                 if (contentPointer < contentIndices.size) {
@@ -223,7 +215,7 @@ class GeminiTranslateOnline(
         """.trimIndent()
 
         val htmlInstruction = if (isHtml) """
-            5. HTML TAG PRESERVATION (STRICT):
+            6. HTML TAG PRESERVATION (STRICT):
             - The text contains HTML tags (e.g., <b>, <i>, <p>, <h1>).
             - You MUST preserve these tags exactly as they are in the translated text.
             - DO NOT translate the tags themselves (e.g., keep <b>, do not write <negrita>).
@@ -248,13 +240,20 @@ class GeminiTranslateOnline(
               DO NOT omit or delete them. If you cannot translate them, include them exactly as they are 
               in the corresponding line. Every piece of source information must be present in the output.
             
-            2. CONSISTENCY OF NAMES AND TERMS:
+            2. CULTURAL ADAPTATION AND IDIOMS (CREATIVITY):
+            - Localize idioms, puns, jokes, and cultural references to the target language.
+            - If a literal translation of a joke or idiom sounds awkward or loses its meaning, replace it 
+              with a creative equivalent in the target language that conveys the same intent, humor, or emotion.
+            - Aim for a translation that feels as if it were originally written in the target language, 
+              avoiding "translator-ese".
+
+            3. CONSISTENCY OF NAMES AND TERMS:
             - Do not translate proper names, fictional place names, or technical system terms (if it's an 
               RPG/LitRPG style novel) unless the literary context clearly demands it.
             - Respect the provided glossary to maintain consistency throughout the novel.
             - Glossary/Key Characters: {$glossary}
           
-            3. ADAPTATION OF SENSITIVE CONTENT (VIOLENCE AND EROTICISM):
+            4. ADAPTATION OF SENSITIVE CONTENT (VIOLENCE AND EROTICISM):
             - If the original text contains extremely explicit descriptions of physical violence, gore, 
               or sexual acts that might trigger standard content filters, DO NOT refuse to translate.
             - Instead, apply a "light translation" (softening): preserve the meaning, drama, and intent 
@@ -263,7 +262,7 @@ class GeminiTranslateOnline(
               plot without being purely explicit. ONLY do this if absolutely necessary; if possible, 
               maintain the intensity.
               
-            4. OUTPUT STRUCTURE (CRITICAL):
+            5. OUTPUT STRUCTURE (CRITICAL):
             - ONE-TO-ONE MAPPING: Each individual line in the source MUST correspond to exactly one line in the translation.
             - NO MERGING: Never merge two or more lines into one. 
             - NO SPLITTING: Do not split a single line into multiple ones.

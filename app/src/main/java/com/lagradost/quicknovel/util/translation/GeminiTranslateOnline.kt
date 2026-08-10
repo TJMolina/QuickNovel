@@ -15,9 +15,12 @@ class GeminiTranslationException(message: String) : Exception(message)
  * Get an API key at: https://aistudio.google.com/
  */
 class GeminiTranslateOnline(
-    private val apiKey: String,
+    private var apiKey: String,
     private val client: Requests,
 ) : OnlineTranslator {
+    fun updateApiKey(key: String) {
+        apiKey = key
+    }
     companion object {
         private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/"
         private const val MAX_CHARS_PER_CHUNK = 10000

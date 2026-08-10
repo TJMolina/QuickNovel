@@ -19,7 +19,7 @@ import org.jsoup.Jsoup
 
 class TranslationManager {
     private val geminiTranslator = GeminiTranslateOnline(
-        apiKey = "AQ.Ab8RN6IKt03VobKjixAWmr3OhulY9E9MTtXjz5CjhM_vZRhuWA",
+        apiKey = "",
         client = MainActivity.app
     )
 

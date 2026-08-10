@@ -626,7 +626,6 @@ class ResultViewModel : ViewModel() {
     }
 
     override fun onCleared() {
-        super.onCleared()
         BookDownloader2.downloadProgressChanged -= ::progressChanged
         //BookDownloader2.downloadDataChanged -= ::progressDataChanged
         BookDownloader2.downloadRemoved -= ::downloadRemoved
@@ -744,7 +743,7 @@ class ResultViewModel : ViewModel() {
         )
         reCacheChapters()
         updateBookmarkData()
-
+        BookDownloader2.openChanged(novelId)
         hasLoaded = true
 
         // insert a download progress if not found

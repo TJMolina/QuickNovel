@@ -598,7 +598,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                     context,
                     allOptions,
                     selectedIndex = selectedIndex,
-                    BookDownloader2.updatePagesDetails,
+                    BookDownloader2.bookmarksOrderChanged,
                     context.getString(R.string.bookmark)
                 ) { selected ->
                     if (selected == 0) {

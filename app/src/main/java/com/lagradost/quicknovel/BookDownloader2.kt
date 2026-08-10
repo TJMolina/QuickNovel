@@ -62,8 +62,6 @@ import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.settings.SettingsFragment.Companion.getBasePath
 import com.lagradost.quicknovel.ui.settings.SettingsFragment.Companion.getDefaultDir
-import com.lagradost.quicknovel.ui.updates.data.UpdatesManager
-import com.lagradost.quicknovel.ui.updates.data.WatchEntry
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromName
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromNameOrNull
 import com.lagradost.quicknovel.util.AppUtils.textToHtmlChapter
@@ -105,8 +103,6 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.readBytes
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.random.Random
-import kotlin.io.readBytes
 
 enum class DownloadActionType {
     Pause,
@@ -1472,7 +1468,8 @@ object BookDownloader2 {
     val bookmarkChanged = Event<Int>()
     val refreshingChanged = Event<RefreshQuery>()
     val chapterReadChanged = Event<String>()
-    val updatePagesDetails = Event<Boolean>()
+    val openChanged = Event<Int>()
+    val bookmarksOrderChanged = Event<Boolean>()
 
     @Immutable
     data class RefreshQuery(

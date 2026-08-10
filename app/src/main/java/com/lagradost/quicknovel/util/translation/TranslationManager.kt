@@ -1,7 +1,5 @@
 package com.lagradost.quicknovel.util.translation
 
-import com.lagradost.quicknovel.BaseApplication.Companion.getKey
-import com.lagradost.quicknovel.EPUB_ML_GEMINI_API_KEY
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.common.model.RemoteModelManager
@@ -43,8 +41,6 @@ class TranslationManager {
         currentAgent = agent
 
         if (agent == TranslatorAgent.GEMINI) {
-            val key = getKey<String>(EPUB_ML_GEMINI_API_KEY) ?: ""
-            geminiTranslator.updateApiKey(key)
         }
 
         if (agent != TranslatorAgent.OFFLINE) {

@@ -193,7 +193,7 @@ class DownloadViewModel2(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    private fun onPagesChanged(preserveState:Boolean) = viewModelScope.launch {
+    private fun onBookmarksOrderChanged(preserveState:Boolean) = viewModelScope.launch {
         loadAll(preserveState)
     }
 
@@ -442,8 +442,9 @@ class DownloadViewModel2(application: Application) : AndroidViewModel(applicatio
         BookDownloader2.bookmarkChanged += this::onBookmarkChanged
         BookDownloader2.refreshingChanged += this::onRefreshingChanged
         BookDownloader2.chapterReadChanged += this::onChapterChanged
+        BookDownloader2.openChanged += this::onOpen
         BookDownloader2.refreshingChanged += this::onRefreshingChanged
-        BookDownloader2.updatePagesDetails += this::onPagesChanged
+        BookDownloader2.bookmarksOrderChanged += this::onBookmarksOrderChanged
     }
 
     override fun onCleared() {
@@ -452,9 +453,25 @@ class DownloadViewModel2(application: Application) : AndroidViewModel(applicatio
         BookDownloader2.downloadDataChanged -= this::onDownloadAdded
         BookDownloader2.bookmarkChanged -= this::onBookmarkChanged
         BookDownloader2.refreshingChanged -= this::onRefreshingChanged
-        BookDownloader2.updatePagesDetails -= this::onPagesChanged
+        BookDownloader2.bookmarksOrderChanged -= this::onBookmarksOrderChanged
         BookDownloader2.refreshingChanged -= this::onRefreshingChanged
         BookDownloader2.chapterReadChanged -= this::onChapterChanged
+        BookDownloader2.openChanged -= this::onOpen
+    }
+
+    fun onOpen(id : Int) {
+        updateState {
+            copy(pages = pages.updateRows {
+                update(id) {
+                    @OptIn(ExperimentalUuidApi::class)
+                    copy(
+                        chaptersRead = ImmutableSearchResponse.chaptersRead(name),
+                        timeOfPageOpened = ImmutableSearchResponse.timeOfPageOpened(id),
+                        epubSize = ImmutableSearchResponse.epubSize(id)
+                    )
+                }
+            })
+        }
     }
 
     fun onChapterChanged(name: String) {
@@ -469,7 +486,7 @@ class DownloadViewModel2(application: Application) : AndroidViewModel(applicatio
                     out = out.update(id) {
                         copy(
                             chaptersRead = ImmutableSearchResponse.chaptersRead(name),
-                            timeOfPageOpened = System.currentTimeMillis(),
+                            timeOfPageOpened = ImmutableSearchResponse.timeOfPageOpened(id),
                             epubSize = ImmutableSearchResponse.epubSize(id)
                         )
                     }

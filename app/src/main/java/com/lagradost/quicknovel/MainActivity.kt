@@ -64,7 +64,6 @@ import com.lagradost.quicknovel.util.Apis.Companion.printProviders
 import com.lagradost.quicknovel.util.Coroutines
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.Coroutines.main
-import com.lagradost.quicknovel.util.Event
 import com.lagradost.quicknovel.util.InAppUpdater.Companion.runAutoUpdate
 import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
@@ -672,7 +671,7 @@ class MainActivity : AppCompatActivity() {
                                     context,
                                     allOptions,
                                     selectedIndex = selectedIndex,
-                                    BookDownloader2.updatePagesDetails,
+                                    BookDownloader2.bookmarksOrderChanged,
                                     context.getString(R.string.bookmark)
                                 ) { selected ->
                                     if (selected == 0) {

@@ -11,13 +11,14 @@ import com.lagradost.quicknovel.DefaultBookmark
 import com.lagradost.quicknovel.compose.CloudStreamTheme.colors
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.result.ResultPageAction
+import kotlinx.collections.immutable.PersistentList
 import kotlinx.coroutines.launch
 
 @Composable
 fun BottomPreview(
     response: ImmutableSearchResponse?,
     isLoading: Boolean,
-    bookmarks: List<DefaultBookmark>,
+    bookmarks: PersistentList<DefaultBookmark>,
     currentBookmarkId: Int,
     showMoreInfo: Boolean,
     onAction: (ResultPageAction) -> Unit
@@ -46,7 +47,7 @@ fun BottomPreview(
 fun BottomPreviewDialog(
     response: ImmutableSearchResponse?,
     isLoading: Boolean,
-    bookmarks: List<DefaultBookmark>,
+    bookmarks: PersistentList<DefaultBookmark>,
     currentBookmarkId: Int,
     showMoreInfo: Boolean,
     onDismiss: () -> Unit,

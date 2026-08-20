@@ -96,7 +96,7 @@ sealed class BookmarkAction{
     data class RenameBookmark(val library: DefaultBookmark, val newTitle: String) : BookmarkAction()
     data class DeleteBookmark(val libraryId: Int) : BookmarkAction()
     data class MergeBookmarks(val sourceId: Int, val targetId: Int) : BookmarkAction()
-    data class ReorderBookmarks(val newList: List<DefaultBookmark>) : BookmarkAction()
+    data class ReorderBookmarks(val newList: PersistentList<DefaultBookmark>) : BookmarkAction()
 }
 
 @Immutable
@@ -449,7 +449,7 @@ class ResultViewModel2(
         }
     }
 
-    private fun reorderLibraries(newList: List<DefaultBookmark>) {
+    private fun reorderLibraries(newList: PersistentList<DefaultBookmark>) {
         val context = BaseApplication.context ?: return
         try {
             newList.forEachIndexed { index, lib ->

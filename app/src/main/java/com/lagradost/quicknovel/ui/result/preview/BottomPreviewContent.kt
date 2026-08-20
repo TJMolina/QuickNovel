@@ -36,6 +36,7 @@ import com.lagradost.quicknovel.ui.common.LoadingPoster
 import com.lagradost.quicknovel.ui.common.html
 import com.lagradost.quicknovel.ui.result.ResultPageAction
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
+import kotlinx.collections.immutable.PersistentList
 
 @Composable
 fun BottomPreviewLoading() {
@@ -81,7 +82,7 @@ fun BottomPreviewLoading() {
 @Composable
 fun BottomPreviewContent(
     response: ImmutableSearchResponse,
-    bookmarks: List<DefaultBookmark>,
+    bookmarks: PersistentList<DefaultBookmark>,
     currentBookmarkId: Int,
     showMoreInfo: Boolean,
     onAction: (ResultPageAction) -> Unit

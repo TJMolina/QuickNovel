@@ -23,6 +23,7 @@ import com.lagradost.quicknovel.compose.InputDialog
 import com.lagradost.quicknovel.compose.SingleSelectDialog
 import com.lagradost.quicknovel.ui.result.BookmarkAction
 import com.lagradost.quicknovel.ui.result.ResultPageAction
+import kotlinx.collections.immutable.PersistentList
 import java.util.Collections
 
 sealed class BookmarkLocalDialog {
@@ -35,7 +36,7 @@ sealed class BookmarkLocalDialog {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookmarkSelectionDialog(
-    bookmarks: List<DefaultBookmark>,
+    bookmarks: PersistentList<DefaultBookmark>,
     currentBookmarkId: Int,
     onDismiss: () -> Unit,
     onAction: (ResultPageAction) -> Unit,

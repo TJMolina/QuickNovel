@@ -32,10 +32,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.Scaffold
@@ -55,7 +52,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -80,16 +76,13 @@ import com.lagradost.quicknovel.compose.BaseStyles.whiteButtonColors
 import com.lagradost.quicknovel.compose.CloudStreamTheme
 import com.lagradost.quicknovel.compose.CloudStreamTheme.colors
 import com.lagradost.quicknovel.compose.RoundedImageShape
-import com.lagradost.quicknovel.compose.SingleSelectDialog
 import com.lagradost.quicknovel.compose.circle
 import com.lagradost.quicknovel.compose.ripple
 import com.lagradost.quicknovel.compose.rounded
+import com.lagradost.quicknovel.getLibraries
 import com.lagradost.quicknovel.mvvm.safe
-import com.lagradost.quicknovel.ui.ReadType
-import com.lagradost.quicknovel.ui.common.DownloadStateAction
 import com.lagradost.quicknovel.ui.common.HorizontalTab
 import com.lagradost.quicknovel.ui.common.ImmutableChapterData
-import com.lagradost.quicknovel.ui.common.ImmutableDownloadState
 import com.lagradost.quicknovel.ui.common.ImmutableReview
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.common.LoadingButton
@@ -112,46 +105,13 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toPersistentList
+import kotlin.uuid.ExperimentalUuidApi
 
 
 @Composable
 fun ResultScreen(state: ResultState, action: (ResultPageAction) -> Unit) {
-    Scaffold(
-        floatingActionButton = {
-            if (state.response != null) {
-                ExtendedFloatingActionButton(
-                    modifier = Modifier,
-                    onClick = {
-                        action(
-                            ResultPageAction.ResultAction(
-                                SearchResponseAction(state.response, SearchResponseOperation.Stream)
-                            )
-                        )
-                    },
-                    // Elevation actually changes the color, because who wanted a sane framework
-                    elevation = FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 0.dp,
-                        pressedElevation = 0.dp,
-                        focusedElevation = 0.dp,
-                        hoveredElevation = 0.dp
-                    ),
-                    containerColor = colors.onBackground,
-                    contentColor = colors.surfaceVariant,
-                    text = {
-                        Text(stringResource(R.string.stream_read))
-                    },
-                    icon = {
-                        Icon(
-                            modifier = Modifier.size(24.dp),
-                            painter = painterResource(R.drawable.netflix_play),
-                            contentDescription = stringResource(R.string.stream_read)
-                        )
-                    },
-                    expanded = false
-                )
-            }
-        }
-    ) { innerPadding ->
+    Scaffold { innerPadding ->
         if (state.loadingResponse) {
             LoadingScreen(Modifier.padding(innerPadding))
         } else {
@@ -161,32 +121,9 @@ fun ResultScreen(state: ResultState, action: (ResultPageAction) -> Unit) {
 }
 
 @Composable
-fun ResultScreenDialog(dialog: ResultDialog, action: (ResultPageAction) -> Unit) {
-    when (dialog) {
-        is ResultDialog.Bookmark -> {
-            SingleSelectDialog(
-                entries = ReadType.entries.associateWith { item -> stringResource(item.stringRes) },
-                dismiss = {
-                    action(ResultPageAction.DismissDialog)
-                },
-                title = stringResource(R.string.bookmark),
-                selectedKey = dialog.selected,
-                confirm = { selected ->
-                    action(ResultPageAction.SetBookmark(selected))
-                    action(ResultPageAction.DismissDialog)
-                })
-        }
-    }
-}
-
-@Composable
 fun ResultScreenImpl(
     padding: PaddingValues, state: ResultState, action: (ResultPageAction) -> Unit
 ) {
-    if (state.dialog != null) {
-        ResultScreenDialog(state.dialog, action)
-    }
-
     val response = state.response ?: return
     // val scrollState = rememberScrollState()
     val posterInteractionSource = remember { MutableInteractionSource() }
@@ -194,13 +131,12 @@ fun ResultScreenImpl(
 
     val isPosterShown = remember { mutableStateOf(false) }
 
-    val tabNames = persistentListOf(
-        R.string.novel, R.string.reviews, R.string.related, R.string.chapters
-    )
+    val tabNames = listOf(
+    stringResource(R.string.tab_downloads)
+    ).plus(LocalContext.current.getLibraries().map { it.title })
+    .toPersistentList()
     val pagerState = rememberPagerState(
-        initialPage = 0,
-        pageCount = { tabNames.size }
-    )
+        initialPage = 0, pageCount = { tabNames.size })
 
     val outerListState = rememberLazyListState()
 
@@ -318,19 +254,21 @@ fun ResultScreenImpl(
                             .background(colors.surfaceContainer)
                     ) {
                         TextIcon(
-                            stringResource(if (state.bookmark == ReadType.NONE) R.string.bookmark else state.bookmark.stringRes),
-                            icon = if (state.bookmark == ReadType.NONE) R.drawable.ic_baseline_add_24 else R.drawable.ic_baseline_bookmark_24,
+                            R.string.bookmark,
+                            R.drawable.ic_baseline_add_24,
                         ) {
-                            action(ResultPageAction.OpenBookmark)
+
                         }
                         TextIcon(
-                            stringResource(R.string.download_open_action),
+                            R.string.open_in_browser,
                             R.drawable.ic_baseline_public_24,
                         ) {
-                            openInBrowser(response.url)
+                            safe {
+                                openInBrowser(response.url)
+                            }
                         }
                         TextIcon(
-                            stringResource(R.string.result_share),
+                            R.string.result_share,
                             R.drawable.ic_outline_share_24,
                         ) {
                             safe {
@@ -448,7 +386,7 @@ fun ChapterPage(
             .background(colors.background),
     ) {
         items(chapters, key = { item ->
-            item.randomUuid
+            @OptIn(ExperimentalUuidApi::class) item.randomUuid
         }) { review ->
             ChapterItem(response, review, action = action, modifier = Modifier.animateItem())
         }
@@ -510,7 +448,7 @@ fun ReviewsPage(
             .background(colors.background),
     ) {
         items(reviews, key = { item ->
-            item.randomUuid
+            @OptIn(ExperimentalUuidApi::class) item.randomUuid
         }) { review ->
             ReviewItem(review, modifier = Modifier.animateItem(), action = action)
         }
@@ -540,8 +478,6 @@ fun ReviewItem(
 ) {
     val textInteractionSource = remember { MutableInteractionSource() }
     val expanded = rememberSaveable { mutableStateOf(false) }
-    val showSpoiler = rememberSaveable { mutableStateOf(false) }
-
     Column(
         modifier = modifier
             .padding(bottom = 10.dp)
@@ -623,36 +559,19 @@ fun ReviewItem(
             }
         }
 
-        val isSpoilerActive = review.containsSpoilers && !showSpoiler.value
-
         Text(
             modifier = Modifier
                 .padding(5.dp)
                 .fillMaxWidth()
                 .clickable(
                     interactionSource = textInteractionSource, indication = null, onClick = {
-                        if (isSpoilerActive) {
-                            showSpoiler.value = true
-                        } else {
-                            expanded.value = !expanded.value
-                        }
+                        expanded.value = !expanded.value
                     })
                 .rounded()
                 .ripple(textInteractionSource)
-                .padding(5.dp)
-                .background(
-                    if (isSpoilerActive) {
-                        colors.onBackground
-                    } else {
-                        Color.Transparent
-                    }, shape = RoundedImageShape()
-                ),
+                .padding(5.dp),
             text = review.content.html(),
-            color = if (isSpoilerActive) {
-                Color.Transparent
-            } else {
-                colors.onBackground
-            },
+            color = colors.onBackground,
             fontSize = 14.sp,
             lineHeight = 15.sp,
             maxLines = if (expanded.value) Int.MAX_VALUE else 8,
@@ -670,249 +589,209 @@ fun NovelPage(
     val textInteractionSource = remember { MutableInteractionSource() }
     val response = state.response ?: return
 
-    LazyColumn {
-        item(key = "infobar") {
-            Row(
-                modifier = Modifier
-                    .padding(5.dp)
-                    .fillMaxWidth()
-                    .height(60.dp)
-            ) {
-                TextInfo(
-                    response.loadData?.views?.let(::humanReadableByteCountSI)
-                        ?: stringResource(R.string.no_data), stringResource(R.string.views)
-                )
-                TextInfo(response.rating?.let {
-                    LocalContext.current.getRating(it)
-                } ?: stringResource(R.string.no_data),
-                    response.loadData?.peopleVoted?.let {
-                        stringResource(
-                            R.string.votes_format,
-                            it
-                        )
-                    }
-                        ?: stringResource(R.string.no_data))
-                TextInfo(
-                    response.loadData?.chapters?.size?.toString()
-                        ?: stringResource(R.string.no_data),
-                    stringResource(R.string.chapters)
-                )
-            }
-        }
-
-        item(key = "spacer") {
-            Box(
-                modifier = Modifier
-                    .height(1.dp)
-                    .padding(horizontal = 15.dp)
-                    .fillMaxWidth()
-                    .background(color = colors.onBackground.copy(alpha = 0.5f))
+    Column {
+        Row(
+            modifier = Modifier
+                .padding(5.dp)
+                .fillMaxWidth()
+                .height(60.dp)
+        ) {
+            TextInfo(
+                response.loadData?.views?.let(::humanReadableByteCountSI)
+                    ?: stringResource(R.string.no_data), stringResource(R.string.views)
+            )
+            TextInfo(response.rating?.let {
+                LocalContext.current.getRating(it)
+            } ?: stringResource(R.string.no_data),
+                response.loadData?.peopleVoted?.let { stringResource(R.string.votes_format, it) }
+                    ?: stringResource(R.string.no_data))
+            TextInfo(
+                response.loadData?.chapters?.size?.toString() ?: stringResource(R.string.no_data),
+                stringResource(R.string.chapters)
             )
         }
+
+        Box(
+            modifier = Modifier
+                .height(1.dp)
+                .padding(horizontal = 15.dp)
+                .fillMaxWidth()
+                .background(color = colors.onBackground.copy(alpha = 0.5f))
+        )
 
         if (!response.synopsis.isNullOrBlank()) {
-            item(key = "synopsis") {
-                Text(
-                    modifier = Modifier
-                        .padding(5.dp)
-                        .clickable(
-                            interactionSource = textInteractionSource,
-                            indication = null,
-                            onClick = {
-                                expanded.value = !expanded.value
-                            })
-                        .rounded()
-                        .ripple(textInteractionSource)
-                        .padding(5.dp),
-                    text = response.synopsis.html(),
-                    color = colors.onBackground,
-                    fontSize = 14.sp,
-                    lineHeight = 15.sp,
-                    maxLines = if (expanded.value) Int.MAX_VALUE else 8,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        val tags = response.tags
-        if (tags != null) {
-            item(key = "tags") {
-                Tags(tags)
-            }
-        }
-
-        if (response.downloadState != null) {
-            item(key = "downloads") {
-                DownloadButtons(response, response.downloadState, action)
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-fun DownloadButtons(
-    response: ImmutableSearchResponse,
-    downloadState: ImmutableDownloadState,
-    action: (ResultPageAction) -> Unit
-) {
-    Row(Modifier.padding(horizontal = 10.dp)) {
-        TextButton(
-            shape = RoundedImageShape(),
-            colors = whiteButtonColors,
-            enabled = downloadState.downloaded > 0,
-            modifier = Modifier
-                .padding(2.dp)
-                .weight(1.0f),
-            onClick = {
-                action(
-                    ResultPageAction.ResultAction(
-                        SearchResponseAction(
-                            response, SearchResponseOperation.Read
-                        )
-                    )
-                )
-            }) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (response.generating) {
-                    CircularProgressIndicator(
-                        color = colors.surfaceVariant,
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .size(24.dp), strokeWidth = 3.0.dp
-                    )
-                } else {
-                    Icon(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .size(24.dp),
-                        painter = painterResource(R.drawable.book_2_24px),
-                        contentDescription = null
-                    )
-                    Text(stringResource(R.string.read_epub))
-                }
-            }
-        }
-        Spacer(Modifier.width(5.dp))
-
-        // Overwrite nothing to done when we are finished
-        val action =
-            DownloadStateAction(if (downloadState.downloaded >= downloadState.total && downloadState.status == DownloadState.Nothing) DownloadState.IsDone else downloadState.status)
-        TextButton(
-            shape = RoundedImageShape(),
-            colors = blackButtonColors,
-            modifier = Modifier
-                .padding(2.dp)
-                .weight(1.0f),
-            onClick = {
-                action(
-                    ResultPageAction.ResultAction(
-                        SearchResponseAction(
-                            response, action.operation
-                        )
-                    )
-                )
-            }) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (downloadState.status == DownloadState.IsPending) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .size(24.dp),
-                        color = colors.onBackground,
-                        strokeWidth = 3.0.dp
-                    )
-                } else {
-                    Icon(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .size(24.dp),
-                        contentDescription = null,
-                        painter = painterResource(action.iconBig)
-                    )
-                    Text(stringResource(action.operationName))
-                }
-            }
-        }
-
-        /*TextButton(
-            colors = whiteButtonColors,
-            modifier = Modifier
-                .padding(2.dp)
-                .weight(1.0f),
-            onClick = {
-                action(
-                    ResultPageAction.ResultAction(
-                        SearchResponseAction(
-                            response, SearchResponseOperation.Read
-                        )
-                    )
-                )
-            }) {
-            Text(stringResource(R.string.read_epub))
-        }*/
-    }
-
-    val animatedProgress: Float by animateFloatAsState(
-        downloadState.progressPercentage,
-        label = "alpha",
-        animationSpec = tween(durationMillis = 1000),
-    )
-
-    val animatedWavy: Float by animateFloatAsState(
-        if (downloadState.status != DownloadState.IsDownloading) {
-            0f
-        } else {
-            1f
-        },
-        label = "alpha",
-        animationSpec = tween(durationMillis = 500),
-    )
-
-    LinearWavyProgressIndicator(
-        progress = { animatedProgress },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(10.dp),
-        amplitude = { animatedWavy },
-        color = colors.onBackground
-    )
-    Spacer(Modifier.height(60.dp))
-}
-
-
-@Composable
-fun Tags(tags: ImmutableList<String>) {
-    val tagInteractionSource = remember { MutableInteractionSource() }
-
-    val expandedTags = rememberSaveable { mutableStateOf(false) }
-    FlowRow(
-        Modifier
-            .fillMaxWidth()
-            .padding(5.dp)
-            .rounded()
-            .clickable(
-                onClick = {
-                    expandedTags.value = !expandedTags.value
-                }, interactionSource = tagInteractionSource
-            ), maxLines = if (expandedTags.value) {
-            Int.MAX_VALUE
-        } else {
-            3
-        }
-    ) {
-        tags.forEach { tag ->
             Text(
-                text = tag,
-                fontSize = 14.sp,
-                lineHeight = 14.sp,
                 modifier = Modifier
-                    .padding(4.dp)
+                    .padding(5.dp)
+                    .clickable(
+                        interactionSource = textInteractionSource, indication = null, onClick = {
+                            expanded.value = !expanded.value
+                        })
                     .rounded()
-                    .background(color = colors.surfaceVariant)
-                    .padding(7.dp)
+                    .ripple(textInteractionSource)
+                    .padding(5.dp),
+                text = response.synopsis.html(),
+                color = colors.onBackground,
+                fontSize = 14.sp,
+                lineHeight = 15.sp,
+                maxLines = if (expanded.value) Int.MAX_VALUE else 8,
+                overflow = TextOverflow.Ellipsis
             )
         }
+
+        val downloadState = response.downloadState ?: return
+
+        val tagInteractionSource = remember { MutableInteractionSource() }
+
+        val expandedTags = rememberSaveable { mutableStateOf(false) }
+        if (response.tags != null) {
+            FlowRow(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(5.dp)
+                    .rounded()
+                    .clickable(
+                        onClick = {
+                            expandedTags.value = !expandedTags.value
+                        }, interactionSource = tagInteractionSource
+                    ), maxLines = if (expandedTags.value) {
+                    Int.MAX_VALUE
+                } else {
+                    3
+                }
+            ) {
+                response.tags.forEach { tag ->
+                    Text(
+                        text = tag,
+                        fontSize = 14.sp,
+                        modifier = Modifier
+                            .padding(4.dp)
+                            .rounded()
+                            .background(color = colors.surfaceVariant)
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
+        /*
+                Box(
+                    modifier = Modifier
+                        .height(1.dp)
+                        .padding(horizontal = 15.dp)
+                        .fillMaxWidth()
+                        .background(color = colors.onBackground.copy(alpha = 0.5f))
+                )*/
+
+        // Text(stringResource(R.string.downloaded), modifier = Modifier.padding(5.dp))
+
+        /*Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(text = downloadState.progress.toString())
+            LinearWavyProgressIndicator(
+                progress = { downloadState.progressPercentage },
+                modifier = Modifier
+                    .weight(1.0f)
+                    .padding(10.dp),
+                amplitude = indicatorAmplitude
+            )
+            Text(text = downloadState.total.toString())
+        }*/
+
+        Row(Modifier.padding(horizontal = 10.dp)) {
+            TextButton(
+                colors = whiteButtonColors,
+                modifier = Modifier
+                    .padding(2.dp)
+                    .weight(1.0f),
+                onClick = {
+                    action(
+                        ResultPageAction.ResultAction(
+                            SearchResponseAction(
+                                response, SearchResponseOperation.Stream
+                            )
+                        )
+                    )
+                }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .size(24.dp),
+                        painter = painterResource(R.drawable.ic_baseline_play_arrow_24),
+                        contentDescription = null
+                    )
+                    Text(stringResource(R.string.stream_read))
+                }
+            }
+            Spacer(Modifier.width(5.dp))
+            TextButton(
+                colors = blackButtonColors,
+                modifier = Modifier
+                    .padding(2.dp)
+                    .weight(1.0f),
+                onClick = {
+                    action(
+                        ResultPageAction.ResultAction(
+                            SearchResponseAction(
+                                response, response.downloadState.operation
+                            )
+                        )
+                    )
+                }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .size(24.dp),
+                        painter = painterResource(R.drawable.netflix_download),
+                        contentDescription = null
+                    )
+                    Text(stringResource(R.string.download))
+                }
+            }
+
+
+            /*TextButton(
+                colors = whiteButtonColors,
+                modifier = Modifier
+                    .padding(2.dp)
+                    .weight(1.0f),
+                onClick = {
+                    action(
+                        ResultPageAction.ResultAction(
+                            SearchResponseAction(
+                                response, SearchResponseOperation.Read
+                            )
+                        )
+                    )
+                }) {
+                Text(stringResource(R.string.read_epub))
+            }*/
+        }
+
+        val animatedProgress: Float by animateFloatAsState(
+            downloadState.progressPercentage,
+            label = "alpha",
+            animationSpec = tween(durationMillis = 1000),
+        )
+
+        val animatedWavy: Float by animateFloatAsState(
+            if (downloadState.status != DownloadState.IsDownloading) {
+                0f
+            } else {
+                1f
+            },
+            label = "alpha",
+            animationSpec = tween(durationMillis = 500),
+        )
+
+        LinearWavyProgressIndicator(
+            progress = { animatedProgress },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            amplitude = { animatedWavy },
+            color = colors.onBackground
+        )
     }
 }
 
@@ -958,7 +837,7 @@ fun RowScope.TextInfo(
 }
 
 @Composable
-fun RowScope.TextIcon(text: String, icon: Int, onClick: () -> Unit) {
+fun RowScope.TextIcon(text: Int, icon: Int, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     Column(
         verticalArrangement = Arrangement.Center,
@@ -970,13 +849,13 @@ fun RowScope.TextIcon(text: String, icon: Int, onClick: () -> Unit) {
             .circle()
     ) {
         Text(
-            text,
+            stringResource(text),
             fontSize = 16.sp,
             modifier = Modifier.padding(2.dp),
             textAlign = TextAlign.Center
         )
         Icon(
-            painter = painterResource(icon), contentDescription = text
+            painter = painterResource(icon), contentDescription = stringResource(text)
         )
     }
 }
@@ -1036,7 +915,7 @@ fun LoadingScreen(modifier: Modifier) {
 fun LoadingPreview() {
     CloudStreamTheme {
         Surface {
-            ResultScreen(
+            @OptIn(ExperimentalUuidApi::class) ResultScreen(
                 state = ResultState(
                     loadingResponse = false,
                     responseError = null,
@@ -1052,6 +931,7 @@ fun LoadingPreview() {
 fun ReviewPreview() {
     CloudStreamTheme {
         Surface {
+            @OptIn(ExperimentalUuidApi::class)
             ReviewItem(
                 review = ImmutableReview(
                     content = "hello world",

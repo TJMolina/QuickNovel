@@ -23,7 +23,6 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavOptions
 import androidx.navigation.fragment.NavHostFragment
 import androidx.preference.PreferenceManager
-import com.anggrayudi.storage.StorageFile
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
@@ -54,9 +53,9 @@ import com.lagradost.quicknovel.mvvm.observeNullable
 import com.lagradost.quicknovel.mvvm.safe
 import com.lagradost.quicknovel.network.CloudflareKiller
 import com.lagradost.quicknovel.providers.RedditProvider
-import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.DownloadFragment
+import com.lagradost.quicknovel.ui.library.LibraryManager
 import com.lagradost.quicknovel.ui.result.ResultFragment
 import com.lagradost.quicknovel.ui.result.ResultViewModel
 import com.lagradost.quicknovel.util.Apis.Companion.apis
@@ -73,8 +72,8 @@ import com.lagradost.quicknovel.util.UIHelper.dismissSafe
 import com.lagradost.quicknovel.util.UIHelper.fixSystemBarsPadding
 import com.lagradost.quicknovel.util.UIHelper.getResourceColor
 import com.lagradost.quicknovel.util.UIHelper.html
-import com.lagradost.quicknovel.util.UIHelper.popupMenu
 import com.lagradost.quicknovel.util.UIHelper.setImage
+import com.lagradost.safefile.SafeFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -91,6 +90,8 @@ class MainActivity : AppCompatActivity() {
             private set(value) {
                 _mainActivity = WeakReference(value)
             }
+        /** Extra used by the NovelUpdatesWorker notification to launch the Updates screen. */
+        const val OPEN_UPDATES_EXTRA = "open_novel_updates"
 
         fun loadPreviewPage(searchResponse: SearchResponse) {
             mainActivity?.loadPopup(searchResponse.url, searchResponse.apiName)
@@ -378,19 +379,16 @@ class MainActivity : AppCompatActivity() {
                 val ctx = this
 
                 // RW perms for the path
-                try {
-                    ctx.contentResolver.takePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                    )
-                } catch (t: Throwable) {
-                    logError(t)
-                }
+                ctx.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
 
-                val file = StorageFile.from(ctx, uri)
-                val fileName = file?.name
-                val mimeType = file?.mimeType //ctx.contentResolver.getType(uri)
-                println("Loaded epub file. Selected URI path: $uri - Name: $fileName with type $mimeType")
+                val file = SafeFile.fromUri(ctx, uri)
+                val fileName = file?.name()
+
+                val mimeType = ctx.contentResolver.getType(uri)
+                println("Loaded epub file. Selected URI path: $uri - Name: $fileName")
 
                 ioSafe {
                     try {
@@ -464,6 +462,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
+
+        //open novel updates fragment
+        if (intent.getBooleanExtra(OPEN_UPDATES_EXTRA, false)) {
+            navigate(R.id.navigation_updates)
+            intent.removeExtra(OPEN_UPDATES_EXTRA)
+            return
+        }
+
         if (intent.action == Intent.ACTION_SEND) {
             val extraText = try { // I don't trust android
                 intent.getStringExtra(Intent.EXTRA_TEXT)
@@ -610,12 +616,6 @@ class MainActivity : AppCompatActivity() {
             true
         }*/
 
-        observe(viewModel.readState) {
-            bottomPreviewBinding?.apply {
-                bookmark.setIconResource(if (it == ReadType.NONE) R.drawable.ic_baseline_bookmark_border_24 else R.drawable.ic_baseline_bookmark_24)
-                bookmark.setText(it.stringRes)
-            }
-        }
 
         observe(viewModel.downloadState) { progressState ->
             val hasDownload = progressState != null && progressState.progress > 0
@@ -625,6 +625,12 @@ class MainActivity : AppCompatActivity() {
                 isVisible = hasDownload
                 isClickable = hasDownload
             }
+        }
+
+        observe(viewModel.libraryId) { libraryId ->
+            bottomPreviewBinding?.bookmark?.setIconResource(if ( libraryId == 0) R.drawable.ic_baseline_bookmark_border_24 else R.drawable.ic_baseline_bookmark_24)
+            val selectedLibrary = this@MainActivity.getLibraries().firstOrNull { it.id == libraryId }
+            bottomPreviewBinding?.bookmark?.text = selectedLibrary?.title ?: getString(R.string.type_none)
         }
 
         observeNullable(viewModel.loadResponse) { resource ->
@@ -651,17 +657,32 @@ class MainActivity : AppCompatActivity() {
                         downloadDeleteTrashFromResult.setOnClickListener {
                             viewModel.deleteAlert()
                         }
+                            //show bottom dialog with libraries
+                            bookmark.setOnClickListener { view ->
+                                val context = view.context ?: return@setOnClickListener
+                                val libraries = context.getLibraries()
+                                val allOptions = mutableListOf(DefaultLibrary(-1, "", context.getString(R.string.type_none), false, -1))
+                                allOptions.addAll(libraries)
 
-                        bookmark.setOnClickListener { view ->
-                            view.popupMenu(
-                                ReadType.entries.map { it.prefValue to it.stringRes },
-                                selectedItemId = viewModel.readState.value?.prefValue
-                            ) {
-                                viewModel.bookmark(itemId)
+                                val currentLibraryId = viewModel.libraryId.value ?: 0
+                                val selectedIndex = if (currentLibraryId == 0) 0 else libraries.indexOfFirst { it.id == currentLibraryId } + 1
+
+                                LibraryManager.showLibraryBottomDialog(
+                                    context,
+                                    allOptions,
+                                    selectedIndex = selectedIndex,
+                                    BookDownloader2.bookmarksOrderChanged,
+                                    context.getString(R.string.bookmark)
+                                ) { selected ->
+                                    if (selected == 0) {
+                                        viewModel.bookmark(0)
+                                    } else {
+                                        val selectedLibrary = libraries.getOrNull(selected - 1) ?: return@showLibraryBottomDialog
+                                        viewModel.bookmark(selectedLibrary.id)
+                                    }
+                                }
                             }
-                        }
-
-                        readMore.setOnClickListener {
+                            readMore.setOnClickListener {
                             loadResult(d.url, viewModel.apiName)
                             hidePreviewPopupDialog()
                         }

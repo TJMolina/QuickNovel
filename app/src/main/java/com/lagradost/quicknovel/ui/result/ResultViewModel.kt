@@ -720,7 +720,7 @@ class ResultViewModel : ViewModel() {
         )
         reCacheChapters()
         updateBookmarkData()
-        BookDownloader2.openChanged(tid)
+        BookDownloader2.openChanged(novelId)
         hasLoaded = true
 
         // insert a download progress if not found

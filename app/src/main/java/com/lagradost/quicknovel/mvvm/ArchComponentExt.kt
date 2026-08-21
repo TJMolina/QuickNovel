@@ -23,6 +23,7 @@ import java.net.UnknownHostException
 import javax.net.ssl.SSLHandshakeException
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.coroutines.cancellation.CancellationException
 
 const val DEBUG_EXCEPTION = "THIS IS A DEBUG EXCEPTION!"
 
@@ -234,6 +235,8 @@ suspend fun <T> safeApiCall(
     return withContext(Dispatchers.IO) {
         try {
             Resource.Success(apiCall.invoke())
+        } catch (throwable: CancellationException) {
+            throw throwable
         } catch (throwable: Throwable) {
             logError(throwable)
             throwableToResource(throwable)

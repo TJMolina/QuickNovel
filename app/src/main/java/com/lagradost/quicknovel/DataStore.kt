@@ -9,6 +9,11 @@ import com.fasterxml.jackson.module.kotlin.KotlinFeature
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.lagradost.quicknovel.mvvm.logError
 import androidx.core.content.edit
+import com.lagradost.quicknovel.util.AppUtils.parseJson
+import com.lagradost.quicknovel.util.AppUtils.toLibraryKey
+import kotlinx.collections.immutable.PersistentList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.util.AppUtils.parseJson
 import com.lagradost.quicknovel.util.AppUtils.toLibraryKey
@@ -49,6 +54,7 @@ const val EPUB_SLEEP_TIMER: String = "reader_epub_tts_timer"
 const val EPUB_ML_FROM_LANGUAGE: String = "reader_epub_ml_from"
 const val EPUB_ML_TO_LANGUAGE: String = "reader_epub_ml_to"
 const val EPUB_ML_USEONLINETRANSLATION: String = "reader_epub_ml_useOnlineTranslation"
+const val EPUB_ML_GEMINI_API_KEY: String = "reader_epub_ml_gemini_api_key"
 const val EPUB_HAS_TIME: String = "reader_epub_has_time"
 const val EPUB_TWELVE_HOUR_TIME: String = "reader_epub_twelve_hour_time"
 const val EPUB_FONT: String = "reader_epub_font"
@@ -64,7 +70,6 @@ const val EPUB_CURRENT_POSITION_CHAPTER: String = "reader_epub_position_chapter"
 
 //all novel data like name, url, etc.
 const val RESULT_BOOKMARK: String = "result_bookmarked"
-
 //novel bookmark like complete, ongoing, etc
 const val RESULT_BOOKMARK_STATE: String = "result_bookmarked_state"
 const val HISTORY_FOLDER: String = "result_history"
@@ -236,7 +241,6 @@ object DataStore {
         return getKey(getFolderName(folder, path), defVal) ?: defVal
     }
 }
-
 const val NOVEL_WATCH_FOLDER: String = "novel_watch_entries"
 const val LIBRARIES_KEY: String = "default_libraries"
 data class DefaultLibrary(
@@ -247,7 +251,7 @@ data class DefaultLibrary(
     val position: Int = 0
 )
 
-val DEFAULT_LIBRARIES: List<DefaultLibrary> = listOf(
+val DEFAULT_LIBRARIES: PersistentList<DefaultLibrary> = persistentListOf(
     DefaultLibrary(1, "READING",       R.string.type_reading.toString(),      editable = false, position = 1),
     DefaultLibrary(2, "PLAN_TO_READ",  R.string.type_plan_to_read.toString(), editable = false, position = 2),
     DefaultLibrary(3, "ON_HOLD",       R.string.type_on_hold.toString(),      editable = false, position = 3),
@@ -258,11 +262,11 @@ val DEFAULT_LIBRARIES: List<DefaultLibrary> = listOf(
  * Returns the list of persisted libraries, sorted by [DefaultLibrary.position].
  * If no list is saved, returns [DEFAULT_LIBRARIES].
  */
-fun Context.getLibraries(): List<DefaultLibrary> {
+fun Context.getLibraries(): PersistentList<DefaultLibrary> {
     val stored = with(DataStore) { this@getLibraries.getKey<Array<DefaultLibrary>>(LIBRARIES_KEY) }
 
     if (stored != null) {
-        return stored.map { it }.sortedBy { it.position }
+        return stored.sortedBy { it.position }.toPersistentList()
     }
     /*
     *If stored is null, it means this is the first time the user has opened
@@ -272,7 +276,7 @@ fun Context.getLibraries(): List<DefaultLibrary> {
     val defaultLibs = DEFAULT_LIBRARIES.map { translateLibrary(it) }
     saveLibraries(defaultLibs)
 
-    return defaultLibs
+    return defaultLibs.toPersistentList()
 }
 
 private fun Context.translateLibrary(lib: DefaultLibrary): DefaultLibrary {
@@ -390,10 +394,9 @@ fun Context.reassignLibraryBookmarks(sourceId: Int, targetId: Int = 0) {
         }
     }
 }
-
 /**
- * Merge libraries from backup.
- */
+ * Merge books from a backup.
+ * **/
 fun Context.mergeLibraries(backupJson: String) {
     try {
         val currentLibs = getLibraries().toMutableList()

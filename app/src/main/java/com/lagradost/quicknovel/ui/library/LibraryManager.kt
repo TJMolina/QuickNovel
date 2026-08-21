@@ -16,6 +16,7 @@ import com.lagradost.quicknovel.deleteLibrary
 import com.lagradost.quicknovel.getLibraries
 import com.lagradost.quicknovel.mergeLibraries
 import com.lagradost.quicknovel.updateLibrary
+import com.lagradost.quicknovel.util.Event
 import com.lagradost.quicknovel.util.SingleSelectionHelper.showBottomDialog
 
 object LibraryManager {
@@ -25,7 +26,7 @@ object LibraryManager {
         context: Context,
         list: List<DefaultLibrary>,
         selectedIndex: Int = -1,
-        refreshVisual: () -> Unit,
+        refreshVisual: Event<Boolean>,
         title: String,
         callback: (Int) -> Unit
     ) {
@@ -44,6 +45,7 @@ object LibraryManager {
                 newList.forEachIndexed { index, lib ->
                     context.updateLibrary(lib.copy(position = index + 1))
                 }
+                refreshVisual.invoke(true)
             },
             //Change a book's library
             onItemClick = { item ->
@@ -113,10 +115,10 @@ object LibraryManager {
     }
 
     //this will update ui
-    private fun refreshInternal(context: Context, adapter: LibrarySectionAdapter, refreshVisual: () -> Unit) {
+    private fun refreshInternal(context: Context, adapter: LibrarySectionAdapter, refreshVisual: Event<Boolean>) {
         val updatedList = context.getLibraries().sortedBy { it.position }
         adapter.submitList(updatedList)
-        refreshVisual()
+        refreshVisual.invoke(true)
     }
 
 
@@ -145,7 +147,7 @@ object LibraryManager {
             .setView(inputView)
             .setPositiveButton(R.string.save) { d, _ ->
                 try {
-                   onConfirm(editText.text.toString().trim())
+                    onConfirm(editText.text.toString().trim())
                 }catch (e: Exception){
                     showToast(e.message)
                 }

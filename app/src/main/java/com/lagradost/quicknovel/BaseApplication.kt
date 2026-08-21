@@ -13,6 +13,7 @@ import com.lagradost.quicknovel.DataStore.getKeys
 import com.lagradost.quicknovel.DataStore.removeKey
 import com.lagradost.quicknovel.DataStore.removeKeys
 import com.lagradost.quicknovel.DataStore.setKey
+import com.lagradost.quicknovel.NotificationHelper.createNotificationChannels
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.util.ResultCached
 import java.lang.ref.WeakReference
@@ -23,13 +24,13 @@ class BaseApplication : Application(), SingletonImageLoader.Factory, Configurati
         super.onCreate()
         //clean corrupted books
         cleanLegacyCorruptBookmarks()
-        NotificationHelper.createAllNotificationChannels(this)
+        this.createNotificationChannels()
         //check worker for updates
         NovelAutoUpdateScheduler.apply(this)
     }
     private fun cleanLegacyCorruptBookmarks() {
         try {
-            val ctx: Context = context ?: return
+            val ctx: Context = applicationContext
             with(DataStore) {
                 ctx.getKeys(RESULT_BOOKMARK_STATE).forEach { stateKey ->
                     val bookKey = stateKey.replaceFirst(RESULT_BOOKMARK_STATE, RESULT_BOOKMARK)

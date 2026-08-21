@@ -12,7 +12,7 @@ import com.lagradost.quicknovel.setStatus
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.newChapterData
-import com.lagradost.quicknovel.newReview
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.collections.map
 
 class FenrirRealProvider : MainAPI() {
@@ -25,6 +25,7 @@ class FenrirRealProvider : MainAPI() {
     override val rateLimitTime = 3000L
     override val hasReviews = true
     override val usesCloudFlareKiller = true
+    val novelsIdRequired = ConcurrentHashMap<String, String>()
 
     override val mainCategories = listOf(
         "All" to "any",
@@ -138,7 +139,8 @@ class FenrirRealProvider : MainAPI() {
         val title = infoDiv.selectFirst("h1")?.text() ?: throw Exception("Title not found")
         val script =
             document.select("script").find { it.html().contains("seriesData") }?.html() ?: ""
-
+        novelsIdRequired[url] =
+            Regex("""seriesData:\{id:(\d+)""").find(script)?.groupValues?.get(1) ?: ""
         return newStreamResponse(title, url, chapters) {
             infoDiv.select(" > div").forEachIndexed { index, inf ->
                 when (index) {
@@ -160,22 +162,28 @@ class FenrirRealProvider : MainAPI() {
             this.synopsis = document.selectFirst("div.synopsis")?.text()
             this.posterUrl = document.selectFirst("meta[property=og:image]")?.attr("content")
             related = getRelated(url)
-            reviewData = Regex("""seriesData:\{id:(\d+)""").find(script)?.groupValues?.get(1)
         }
     }
 
 
-    override suspend fun loadReviews(url: String, page: Int, data: String?): List<UserReview> {
-        val libraryId = data ?: return emptyList()
+    override suspend fun loadReviews(
+        url: String,
+        page: Int,
+        showSpoilers: Boolean
+    ): List<UserReview> {
+        val libraryId = novelsIdRequired[url] ?: return emptyList()
 
         val realUrl = "$mainUrl/api/new/v2/comments/series/$libraryId?page=$page&sort=latest"
         val res = app.get(realUrl).parsed<CommentsResponse>()
         return res.data.map { comment ->
-            newReview(comment.content) {
-                username = comment.user.username
-                date = comment.createdAt.split("T").firstOrNull()
-                avatarUrl = comment.user.avatar
-            }
+            val date = comment.createdAt.split("T").firstOrNull()
+
+            UserReview(
+                review = comment.content,
+                username = comment.user.username,
+                reviewDate = date,
+                avatarUrl = fixUrlNull(comment.user.avatar)
+            )
         }
     }
 

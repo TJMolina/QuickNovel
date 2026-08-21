@@ -13,9 +13,9 @@ import com.lagradost.quicknovel.MainActivity.Companion.app
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.ui.UiImage
 import com.lagradost.quicknovel.ui.img
-import com.lagradost.quicknovel.util.DefaultImagesHeaders
+import com.lagradost.quicknovel.util.CommonHeaders
 import kotlinx.coroutines.sync.Mutex
-import org.jsoup.nodes.Document
+import org.jsoup.Jsoup
 
 const val USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36"
@@ -31,7 +31,7 @@ abstract class MainAPI {
 
     fun fixPosterHeaders(headers: Map<String, String>?): Map<String, String>? {
         return if (usesCloudFlareKiller) (headers
-            ?: emptyMap()) + DefaultImagesHeaders.useCloudflareKillerHeader else headers
+            ?: emptyMap()) + CommonHeaders.useCloudflareKillerHeader else headers
     }
 
     open val rateLimitTime: Long = 0
@@ -61,7 +61,7 @@ abstract class MainAPI {
     open suspend fun loadReviews(
         url: String,
         page: Int,
-        data : String?,
+        showSpoilers: Boolean = false
     ): List<UserReview> {
         throw NotImplementedError()
     }
@@ -128,27 +128,13 @@ val String?.textClean: String?
         ?.replace("\\+([A-z])".toRegex(), "$1") //\+([^-\s])
             )
 
-fun packageAsXHtml(title: String, bodyHtml: String): String {
-    return """
-        <?xml version='1.0' encoding='utf-8'?>
-        <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-        <head>
-            <title>$title</title>
-            <link rel="stylesheet" type="text/css" href="style.css"/>
-        </head>
-        <body>
-            $bodyHtml
-        </body>
-        </html>
-    """.trimIndent()
-}
-
 fun stripHtml(
-    document: Document,
+    txt: String,
     chapterName: String? = null,
     chapterIndex: Int? = null,
     stripAuthorNotes: Boolean
 ): String {
+    val document = Jsoup.parse(txt)
     try {
         if (stripAuthorNotes) {
             document.select("div.qnauthornotecontainer").remove()
@@ -188,15 +174,14 @@ data class HeadMainPageResponse(
 )
 
 data class UserReview(
-    var review: String,
-    var title: String? = null,
-    var username: String? = null,
-    var avatarUrl: String? = null,
-    var rating: Int? = null,
-    var ratings: List<Pair<Int, String>>? = null,
-    var date: String? = null,
-    var avatarHeaders: Map<String, String>? = null,
-    var containsSpoilers : Boolean = false,
+    val review: String,
+    val reviewTitle: String? = null,
+    val username: String? = null,
+    val reviewDate: String? = null,
+    val avatarUrl: String? = null,
+    val rating: Int? = null,
+    val ratings: List<Pair<Int, String>>? = null,
+    val avatarHeaders: Map<String, String>? = null,
 )
 /*
 data class MainPageResponse(
@@ -235,22 +220,6 @@ fun MainAPI.newSearchResponse(
     )
     builder.initializer()
     builder.posterHeaders = fixPosterHeaders(builder.posterHeaders)
-    return builder
-}
-
-fun MainAPI.newReview(
-    content: String,
-    fix: Boolean = true,
-    initializer: UserReview.() -> Unit = { },
-): UserReview {
-    val builder = UserReview(
-        review = content
-    )
-    builder.initializer()
-    if(fix) {
-        builder.avatarUrl = fixUrlNull(builder.avatarUrl)
-    }
-    builder.avatarHeaders = fixPosterHeaders(builder.avatarHeaders)
     return builder
 }
 
@@ -295,7 +264,7 @@ interface LoadResponse {
     val image: UiImage? get() = img(url = posterUrl, headers = posterHeaders)
     val apiName: String
     var related: List<SearchResponse>?
-    var reviewData : String?
+
     fun downloadImage(): UiImage? {
 
         return if ((apiName == IMPORT_SOURCE || apiName == IMPORT_SOURCE_PDF)) {
@@ -328,8 +297,7 @@ data class StreamResponse(
     override var status: ReleaseStatus? = null,
     override var posterHeaders: Map<String, String>? = null,
     var nextChapter: ChapterData? = null,
-    override var related: List<SearchResponse>? = null,
-    override var reviewData: String? = null
+    override var related: List<SearchResponse>? = null
 ) : LoadResponse
 
 suspend fun MainAPI.newStreamResponse(
@@ -405,8 +373,7 @@ data class EpubResponse(
     var downloadLinks: List<DownloadLink>,
     var downloadExtractLinks: List<DownloadExtractLink>,
     override val apiName: String,
-    override var related: List<SearchResponse>? = null,
-    override var reviewData: String? = null
+    override var related: List<SearchResponse>? = null
 ) : LoadResponse
 
 suspend fun MainAPI.newEpubResponse(

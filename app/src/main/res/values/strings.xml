@@ -314,7 +314,6 @@
     <string name="unknown">Unknown</string>
     <string name="chapter">Chapter</string>
     <string name="no_update_found">No Update Found</string>
-
     <string name="search_downloads">Search Downloads…</string>
     <string name="chapters">Chapters</string>
     <string name="paragraph_spacing">Paragraph spacing</string>
@@ -337,6 +336,15 @@
     <string name="library_rename_only">Rename only</string>
     <string name="drag_handle">Drag to reorder</string>
     <string name="add_new_library">Add new bookmark</string>
+
+    <!-- Library dialogs errors -->
+    <string name="library_error_duplicate_ids">Library list contains duplicate IDs.</string>
+    <string name="library_error_exists">A library with this ID or name already exists.</string>
+    <string name="library_error_invalid_name">The name is invalid</string>
+    <string name="library_error_not_found">Library not found.</string>
+    <string name="library_error_not_editable">This category is protected and cannot be modified.</string>
+    <string name="library_error_same_ids">Source and target libraries must be different.</string>
+    <string name="library_error_target_not_found">Target library not found.</string>
 
     <!-- Novel Updates Tracker -->
     <string name="updates_watch">Watch</string>
@@ -386,13 +394,4 @@
     <string name="updates_filter_all">All</string>
     <string name="updates_filter_watching">Watching</string>
     <string name="updates_filter_not_watching">Not Watching</string>
-
-    <!-- Library dialogs errors -->
-    <string name="library_error_duplicate_ids">Library list contains duplicate IDs.</string>
-    <string name="library_error_exists">A library with this ID or name already exists.</string>
-    <string name="library_error_invalid_name">The name is invalid</string>
-    <string name="library_error_not_found">Library not found.</string>
-    <string name="library_error_not_editable">This category is protected and cannot be modified.</string>
-    <string name="library_error_same_ids">Source and target libraries must be different.</string>
-    <string name="library_error_target_not_found">Target library not found.</string>
 </resources>

@@ -92,7 +92,6 @@ class LibrarySectionAdapter(
     @SuppressLint("ClickableViewAccessibility")
     override fun onBindContent(holder: ViewHolderState<Any>, item: DefaultLibrary, position: Int) {
         val binding = holder.view as? ItemLibrarySectionBinding ?: return
-        val context = binding.root.context
 
         //is a default library?
         val isBuiltIn = item.key in builtInKeys

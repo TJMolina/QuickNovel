@@ -21,6 +21,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipDrawable
 import com.google.android.material.tabs.TabLayout
+import com.lagradost.quicknovel.BookDownloader2
 import com.lagradost.quicknovel.CommonActivity
 import com.lagradost.quicknovel.DefaultLibrary
 import com.lagradost.quicknovel.DownloadState
@@ -597,7 +598,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                     context,
                     allOptions,
                     selectedIndex = selectedIndex,
-                    {},
+                    BookDownloader2.bookmarksOrderChanged,
                     context.getString(R.string.bookmark)
                 ) { selected ->
                     if (selected == 0) {

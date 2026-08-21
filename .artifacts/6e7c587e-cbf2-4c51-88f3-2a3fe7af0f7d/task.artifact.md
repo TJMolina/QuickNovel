@@ -1,0 +1,2 @@
+- `[ ]` Corregir lógica de retorno y bloque `finally` en `getNewTotalChapters`
+- `[ ]` Verificar cambios y compilación

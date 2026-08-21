@@ -81,6 +81,7 @@ import kotlin.properties.Delegates
 import com.google.android.material.tabs.TabLayout
 import com.lagradost.quicknovel.ReadActivityViewModel.MLSettings.Companion.AUTO_LANG
 import com.lagradost.quicknovel.util.UIHelper.fixSystemBarsPadding
+import com.lagradost.quicknovel.util.translation.models.TranslatorAgent
 
 class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     companion object {
@@ -1329,7 +1330,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                         it.second
                     },
                     items.map { it.first }.indexOf(viewModel.mlToLanguage),
-                    context.getString(R.string.translate_to), false, {}
+                    context.getString(R.string.sleep_timer), false, {}
                 ) { index ->
                     viewModel.mlToLanguage = items[index].first
                     binding.readMlTo.text =
@@ -1337,9 +1338,13 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 }
             }
 
-            binding.readOnlineTranslationSwitch.isChecked = viewModel.mlUseOnlineTransaltion
+            binding.readOnlineTranslationSwitch.isChecked = viewModel.currentAgent != TranslatorAgent.OFFLINE
             binding.readOnlineTranslationSwitch.setOnCheckedChangeListener { _, isChecked ->
-                viewModel.mlUseOnlineTransaltion = isChecked
+                viewModel.mlTranslationAgent = if (isChecked) {
+                    TranslatorAgent.GEMINI.ordinal
+                } else {
+                    TranslatorAgent.OFFLINE.ordinal
+                }
                 //Do not allow automatic detection of the target language; the user should know that themselves (they should know the name of their own language).
                 //It could probably be automated, but I have no idea.
                 if (isChecked == false && viewModel.mlFromLanguage == AUTO_LANG) {
@@ -1352,17 +1357,17 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 if (view == null) return@setOnClickListener
                 val context = view.context
 
-                val items = (
-                    if (!viewModel.mlUseOnlineTransaltion) ReadActivityViewModel.MLSettings.mapList
-                    else ReadActivityViewModel.MLSettings.mapOnlineList
-                )
+                val items = if (viewModel.currentAgent != TranslatorAgent.OFFLINE) {
+                    ReadActivityViewModel.MLSettings.mapOnlineList
+                } else {
+                    ReadActivityViewModel.MLSettings.mapList
+                }
+
 
                 context.showDialog(
-                    items.map { item ->
-                        item.second
-                    },
-                    items.map { item -> item.first }.indexOf(viewModel.mlFromLanguage),
-                    context.getString(R.string.translate_from), false, {}
+                    items.map { it.second },
+                    items.map { it.first }.indexOf(viewModel.mlFromLanguage),
+                    context.getString(R.string.sleep_timer), false, {}
                 ) { index ->
                     viewModel.mlFromLanguage = items[index].first
                     binding.readMlFrom.text =
@@ -1374,24 +1379,22 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 if (view == null) return@setOnClickListener
                 ioSafe {
                     try {
-                        if (!viewModel.requireMLDownload()) {
-                            viewModel.applyMLSettings(true)
+                        val needsDownload = viewModel.requireMLDownload()
+                        if (!needsDownload) {
+                            viewModel.applyMLSettings()
                             runOnUiThread { bottomSheetDialog.dismiss() }
-
-                            return@ioSafe
-                        }
-                        runOnUiThread {
-                            val builder: AlertDialog.Builder =
+                        } else {
+                            runOnUiThread {
                                 AlertDialog.Builder(view.context, R.style.AlertDialogCustom)
-                            builder.setTitle(R.string.download_ml)
-                            builder.setMessage(R.string.download_ml_long)
-                            builder.setPositiveButton(R.string.download) { _, _ ->
-                                viewModel.applyMLSettings(true)
-                                bottomSheetDialog.dismiss()
+                                    .setTitle(R.string.download_ml)
+                                    .setMessage(R.string.download_ml_long)
+                                    .setPositiveButton(R.string.download) { _, _ ->
+                                        viewModel.applyMLSettings()
+                                        bottomSheetDialog.dismiss()
+                                    }
+                                    .setNegativeButton(R.string.cancel, null)
+                                    .show()
                             }
-                            builder.setCancelable(true)
-                            builder.setNegativeButton(R.string.cancel) { _, _ -> }
-                            builder.show()
                         }
                     } catch (t: Throwable) {
                         showToast(t.message ?: t.toString())
@@ -1406,12 +1409,14 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
             val mlSettings = viewModel.mlSettings
 
-            if (mlSettings.isInvalid()) {
-                binding.readMlTitle.setText(R.string.google_translate)
-            } else {
-                binding.readMlTitle.text =
-                    "${binding.readMlTitle.context.getString(R.string.google_translate)} (${mlSettings.fromDisplay} -> ${mlSettings.toDisplay})"
+            val agentName = when(mlSettings.agent) {
+                TranslatorAgent.GEMINI -> "Gemini AI"
+                TranslatorAgent.ONLINE -> "Google Online"
+                else -> getString(R.string.google_translate)
             }
+
+           binding.readMlTitle.text =
+                    "$agentName (${mlSettings.fromDisplay} -> ${mlSettings.toDisplay})"
 
             binding.readLanguage.setOnClickListener { _ ->
                 ioSafe {

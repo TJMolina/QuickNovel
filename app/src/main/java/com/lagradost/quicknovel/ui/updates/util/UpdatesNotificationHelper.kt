@@ -8,6 +8,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.lagradost.quicknovel.MainActivity
 import com.lagradost.quicknovel.NotificationHelper
+import com.lagradost.quicknovel.NotificationHelper.createNotificationChannels
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.ui.updates.data.WatchEntry
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
@@ -15,7 +16,7 @@ import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 object UpdatesNotificationHelper {
 
     suspend fun postEntryNotification(entry: WatchEntry, ctx: Context) {
-        NotificationHelper.createAllNotificationChannels(ctx)
+       ctx.createNotificationChannels()
 
         val intent = Intent(ctx, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP

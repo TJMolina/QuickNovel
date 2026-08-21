@@ -11,26 +11,29 @@ import com.lagradost.quicknovel.USER_AGENT
 import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.fixUrlNull
 import com.lagradost.quicknovel.newChapterData
-import com.lagradost.quicknovel.newReview
 import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.setStatus
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import java.util.concurrent.ConcurrentHashMap
 
-open class LibReadProvider : FreewebnovelProvider() {
+open class LibReadProvider : MainAPI() {
     override val name = "LibRead"
     override val mainUrl = "https://libread.com"
+
     //for some reason, now is freewebnovel
-    override val secondUrl = "https://freewebnovel.com"
+    val secondUrl = "https://freewebnovel.com"
     override val hasMainPage = true
 
-    override val removeHtml = false
+    open val removeHtml = false // because the two sites use .html or not for no reason
 
     override val iconId = R.drawable.icon_libread
 
     override val iconBackgroundId = R.color.libread_header_color
-    override val rateLimitTime = 1000L
+    override val hasReviews = true
+    val novelsIdRequired = ConcurrentHashMap<String, String>()
+
     override val tags = listOf(
         "All" to "",
         "Action" to "Action",
@@ -77,9 +80,25 @@ open class LibReadProvider : FreewebnovelProvider() {
         "Completed Novels" to "completed-novel"
     )
 
-
-    override fun getAcode(url:String): String = url.substringAfterLast("/").substringBeforeLast("-")
-
+    private suspend fun getChapterList(doc: Document, url: String): List<ChapterData> {
+        val novelId = doc.selectFirst("a.set-case.add")?.attr("data-articleid")
+            ?: doc.selectFirst("meta[name=image]")?.attr("content")?.substringAfterLast("/")?.substringBefore("s.jpg")
+            ?: return emptyList()
+        val res = app.post(
+            "$mainUrl/api/chapterlist.php", data = mapOf(
+                "aid" to novelId,
+                "acode" to url.removeSuffix("/").substringAfterLast("/"),
+                "cid" to "1"
+            )
+        ).parsed<ChaptersResponse>()
+        val document = Jsoup.parse(res.html)
+        return document.select("option").mapNotNull { i ->
+            newChapterData(
+                name = i.text(),
+                url = "${url.removeSuffix("/")}/${i.attr("value").substringAfterLast("/")}"
+            )
+        }
+    }
     override suspend fun loadMainPage(
         page: Int,
         mainCategory: String?,
@@ -102,6 +121,21 @@ open class LibReadProvider : FreewebnovelProvider() {
         }
         return HeadMainPageResponse(url, returnValue)
     }
+
+    override suspend fun loadHtml(url: String): String? {
+        val response = app.get(url)
+        val document = Jsoup.parse(
+            response.text
+                .replace(
+                    "\uD835\uDCF5\uD835\uDC8A\uD835\uDC83\uD835\uDE67\uD835\uDE5A\uD835\uDC82\uD835\uDCED.\uD835\uDCEC\uD835\uDE64\uD835\uDE62",
+                    "",
+                    true
+                )
+                .replace("libread.com", "", true)
+        )
+        return document.selectFirst("div.txt")?.html()
+    }
+
 
     override suspend fun search(query: String): List<SearchResponse> {
         val document = app.post(
@@ -129,6 +163,100 @@ open class LibReadProvider : FreewebnovelProvider() {
         }
     }
 
+    fun getRelated(dc: Document): List<SearchResponse> {
+        return dc.select("div.col-l > ul.ul-list6 > li").mapNotNull { element ->
+            val href = element.selectFirst("a")?.attr("href") ?: return@mapNotNull null
+            val title = element.selectFirst("h3")?.text() ?: return@mapNotNull null
+            newSearchResponse(
+                name = title,
+                url = href
+            ) {
+                posterUrl = fixUrlNull(
+                    element.selectFirst("img")?.attr("src")
+                )
+            }
+        }
+    }
+
+    override suspend fun load(url: String): LoadResponse? {
+        val response = app.get(url)
+        val document = response.document
+        val name = document.selectFirst("h1.tit")?.text() ?: return null
+        val chaptersDataphp = getChapterList(document, url)
+        novelsIdRequired[url] = document.selectFirst("a.set-case.add")?.attr("data-articleid") ?: ""
+        return newStreamResponse(url = url, name = name, data = chaptersDataphp) {
+            author =
+                document.selectFirst("span.glyphicon.glyphicon-user")?.nextElementSibling()?.text()
+            tags =
+                document.selectFirst("span.glyphicon.glyphicon-th-list")?.nextElementSiblings()
+                    ?.get(0)
+                    ?.text()
+                    ?.splitToSequence(", ")?.toList()
+            posterUrl = fixUrlNull(
+                document.selectFirst("picture source")
+                    ?.attr("srcset")
+                    ?.split(",")
+                    ?.lastOrNull()
+                    ?.trim()
+                    ?.substringBefore(" ")
+            ) ?: fixUrlNull(document.selectFirst("div.pic img")?.attr("src"))
+            synopsis = document.selectFirst("div.inner")?.text()
+            val votes = document.selectFirst("div.m-desc > div.score > p:nth-child(2)")
+            if (votes != null) {
+                rating = votes.text().substringBefore('/').toFloat().times(200).toInt()
+                peopleVoted = votes.text().substringAfter('(').filter { it.isDigit() }.toInt()
+            }
+            val statusHeader0 = document.selectFirst("span.s1.s2")
+            val statusHeader = document.selectFirst("span.s1.s3")
+
+            setStatus(
+                statusHeader?.selectFirst("a")?.text() ?: statusHeader0?.selectFirst("a")?.text()
+            )
+            related = getRelated(document)
+        }
+    }
+
+    override suspend fun loadReviews(
+        url: String,
+        page: Int,
+        showSpoilers: Boolean
+    ): List<UserReview> {
+
+        val realUrl = "$mainUrl/api/comments.php"
+
+        val responses: List<LibReadCommentsResponse> = if (page == 1) {
+            (1..4).mapNotNull { i ->
+                app.post(
+                    realUrl, data = mapOf(
+                        "action" to "list",
+                        "articleid" to novelsIdRequired[url].toString(),
+                        "chapterid" to "0",
+                        "page" to i.toString()
+                    )
+                ).parsedSafe<LibReadCommentsResponse>()
+            }
+        } else {
+            listOfNotNull(
+                app.post(
+                    realUrl, data = mapOf(
+                        "action" to "list",
+                        "articleid" to novelsIdRequired[url].toString(),
+                        "chapterid" to "0",
+                        "page" to (page + 3).toString()
+                    )
+                ).parsedSafe<LibReadCommentsResponse>()
+            )
+        }
+
+        return responses.flatMap { it.data?.dataList ?: emptyList() }.map { item ->
+            UserReview(
+                review = item.content ?: "",
+                username = item.userInfo?.nickname ?: "User",
+                reviewDate = item.createdAt,
+                avatarUrl = fixUrlNull(item.userInfo?.picture),
+            )
+        }
+    }
     data class LibReadCommentsResponse(
         @JsonProperty("data") val data: LibReadCommentData? = null
     )

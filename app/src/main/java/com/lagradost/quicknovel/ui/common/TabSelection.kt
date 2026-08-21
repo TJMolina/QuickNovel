@@ -1,18 +1,13 @@
 package com.lagradost.quicknovel.ui.common
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.SecondaryScrollableTabRow
@@ -31,14 +26,13 @@ import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.compose.CloudStreamTheme
 import com.lagradost.quicknovel.compose.CloudStreamTheme.colors
 import com.lagradost.quicknovel.compose.circle
-import com.lagradost.quicknovel.ui.download.DownloadRow
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 
 @Composable
 fun HorizontalTab(
     pagerState: PagerState,
-    names: PersistentList<Int>,
+    names: PersistentList<String>,
     containerColor: Color,
     edgePadding: Dp = 0.dp,
 ) {
@@ -82,7 +76,7 @@ fun HorizontalTab(
                         pagerState.requestScrollToPage(index)
                     }, text = {
                         Text(
-                            stringResource(row), color = if (selected) {
+                            row, color = if (selected) {
                                 colors.background
                             } else {
                                 colors.onBackground
@@ -99,18 +93,10 @@ fun HorizontalTab(
 fun Preview() {
     CloudStreamTheme {
         val list = persistentListOf(
-            R.string.downloaded,
-            R.string.type_reading,
-            R.string.type_dropped,
-            R.string.type_completed,
-            R.string.type_completed,
-            R.string.type_completed,
-            R.string.type_completed,
-            R.string.type_completed,
-            R.string.type_completed,
-            R.string.type_completed,
-            R.string.type_completed,
-            R.string.type_completed
+            stringResource(R.string.downloaded),
+            stringResource(R.string.type_reading),
+                stringResource(R.string.type_dropped),
+                    stringResource(R.string.type_completed)
         )
         val pager = rememberPagerState() { list.size }
         HorizontalTab(pager, list, Color.Transparent)

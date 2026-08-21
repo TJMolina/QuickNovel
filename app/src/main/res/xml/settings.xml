@@ -53,27 +53,7 @@
             app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>
 
-    <PreferenceCategory android:title="@string/novel_auto_update_category">
-        <SwitchPreference
-            app:key="@string/auto_update_key"
-            android:title="@string/show_app_updates"
-            android:summary="@string/show_app_updates_desc"
-            app:defaultValue="true"
-            android:icon="@drawable/ic_baseline_notifications_active_24" />
-        <SwitchPreference
-            android:icon="@drawable/ic_baseline_notifications_24"
-            android:key="@string/novel_auto_update_enabled_key"
-            android:title="@string/novel_auto_update_enabled_title"
-            android:summary="@string/novel_auto_update_enabled_desc" />
-        <Preference
-            android:icon="@drawable/ic_baseline_notifications_active_24"
-            android:key="@string/novel_auto_update_interval_key"
-            android:title="@string/novel_auto_update_interval_title"
-            android:summary="@string/novel_auto_update_interval_desc"
-            app:dependency="@string/novel_auto_update_enabled_key" />
-    </PreferenceCategory>
-
-    <PreferenceCategory android:title="@string/reader">
+    <PreferenceCategory android:title="@string/external_reader">
         <SwitchPreference
             app:key="@string/external_reader_key"
             android:title="@string/external_reader"

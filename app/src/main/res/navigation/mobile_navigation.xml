@@ -49,13 +49,6 @@
             android:name="com.lagradost.quicknovel.ui.result.ResultFragment2"
             android:layout_height="match_parent">
     </fragment>
-    <fragment
-        android:id="@+id/navigation_updates"
-        android:name="com.lagradost.quicknovel.ui.updates.UpdatesFragment"
-        android:label="@string/updates_title"
-        android:layout_height="match_parent"
-        tools:layout="@layout/fragment_updates">
-    </fragment>
 
     <action
             android:id="@+id/global_to_navigation_results"

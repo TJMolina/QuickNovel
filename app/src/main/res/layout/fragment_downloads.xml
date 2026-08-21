@@ -41,18 +41,6 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/download_updates_icon"
-                style="@style/Widget.MaterialComponents.Button.TextButton.Icon"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:contentDescription="@string/updates_open_screen"
-                app:icon="@drawable/ic_baseline_notifications_24"
-                app:iconTint="?attr/iconColor"
-                app:iconPadding="0dp"
-                app:iconGravity="textStart" />
-
             <!-- Red point(Badge) -->
             <View
                 android:id="@+id/download_updates_badge"

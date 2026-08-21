@@ -138,11 +138,4 @@
         <item>Green</item>
         <item>GreenApple</item>
     </string-array>
-
-    <!-- Filter options to watch list at novels update screen -->
-    <string-array name="updates_filter_options">
-        <item>@string/updates_filter_all</item>
-        <item>@string/updates_filter_watching</item>
-        <item>@string/updates_filter_not_watching</item>
-    </string-array>
 </resources>

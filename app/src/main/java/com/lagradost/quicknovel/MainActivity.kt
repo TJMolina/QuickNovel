@@ -14,6 +14,12 @@ import androidx.activity.viewModels
 import androidx.annotation.IdRes
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentActivity
 import androidx.navigation.NavController
@@ -44,6 +50,10 @@ import com.lagradost.quicknovel.CommonActivity.updateLocale
 import com.lagradost.quicknovel.DataStore.getKey
 import com.lagradost.quicknovel.DataStore.getKeys
 import com.lagradost.quicknovel.NotificationHelper.requestNotifications
+import com.lagradost.quicknovel.compose.ActionDialog
+import com.lagradost.quicknovel.compose.CloudStreamTheme
+import com.lagradost.quicknovel.compose.loadPrimaryColor
+import com.lagradost.quicknovel.compose.loadThemeMode
 import com.lagradost.quicknovel.databinding.ActivityMainBinding
 import com.lagradost.quicknovel.databinding.BottomPreviewBinding
 import com.lagradost.quicknovel.mvvm.Resource
@@ -57,7 +67,11 @@ import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.library.LibraryManager
 import com.lagradost.quicknovel.ui.result.ResultFragment
+import com.lagradost.quicknovel.ui.result.ResultPageAction
 import com.lagradost.quicknovel.ui.result.ResultViewModel
+import com.lagradost.quicknovel.ui.result.ResultViewModel2
+import com.lagradost.quicknovel.ui.result.preview.BookmarkSelectionDialog
+import com.lagradost.quicknovel.ui.result.preview.BottomPreviewDialog
 import com.lagradost.quicknovel.util.Apis.Companion.apis
 import com.lagradost.quicknovel.util.Apis.Companion.getApiSettings
 import com.lagradost.quicknovel.util.Apis.Companion.printProviders
@@ -80,6 +94,7 @@ import okhttp3.OkHttpClient
 import java.lang.ref.WeakReference
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
+import kotlin.getValue
 import kotlin.reflect.KClass
 
 class MainActivity : AppCompatActivity() {
@@ -94,15 +109,13 @@ class MainActivity : AppCompatActivity() {
         const val OPEN_UPDATES_EXTRA = "open_novel_updates"
 
         fun loadPreviewPage(searchResponse: SearchResponse) {
-            mainActivity?.loadPopup(searchResponse.url, searchResponse.apiName)
+            mainActivity?.mainViewModel?.onAction(
+                ResultPageAction.LoadResult(ImmutableSearchResponse.from(searchResponse))
+            )
         }
 
         fun loadPreviewPage(searchResponse: ImmutableSearchResponse) {
-            if (searchResponse.id == null) {
-                mainActivity?.loadPopup(searchResponse.url, searchResponse.apiName)
-            } else {
-                mainActivity?.loadPopup(searchResponse)
-            }
+            mainActivity?.mainViewModel?.onAction(ResultPageAction.LoadResult(response = searchResponse,))
         }
 
         fun loadPreviewPage(card: DownloadFragment.DownloadDataLoaded) {
@@ -524,6 +537,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     var binding: ActivityMainBinding? = null
+    private val mainViewModel: ResultViewModel2 by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         mainActivity = this
 
@@ -536,6 +550,54 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding!!.root)
+
+        findViewById<ComposeView>(R.id.main_compose_view).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                val state by mainViewModel.state.collectAsState()
+                val context = LocalContext.current
+                CloudStreamTheme(
+                    mode = context.loadThemeMode(),
+                    primaryColor = context.loadPrimaryColor(),
+                ) {
+                    if (state.dialogState?.isPreviewOpen == true) {
+                        BottomPreviewDialog(
+                            response = state.response,
+                            isLoading = state.loadingResponse,
+                            bookmarks = state.bookmarks,
+                            currentBookmarkId = state.currentBookmark,
+                            showMoreInfo = state.showMoreInfo,
+                            onDismiss = { mainViewModel.onAction(ResultPageAction.DismissDialog) },
+                            onAction = { mainViewModel.onAction(it) }
+                        )
+                    }
+
+                    if (state.dialogState?.isDeleteConfirmationOpen == true) {
+                        val title = state.deleteTarget?.name ?: state.response?.name
+                        if (title != null) {
+                            ActionDialog(
+                                title = stringResource(R.string.delete),
+                                text = stringResource(R.string.permanently_delete_format).format(title),
+                                confirmText = stringResource(R.string.delete),
+                                dismissText = stringResource(R.string.cancel),
+                                dismiss = { mainViewModel.onAction(ResultPageAction.DismissDeleteConfirmation) },
+                                confirm = {
+                                    mainViewModel.onAction(ResultPageAction.DeleteNovel(0)) // ID handled by VM
+                                }
+                            )
+                        }
+                    }
+                    if (state.dialogState?.isBookmarkSelectionOpen == true) {
+                        BookmarkSelectionDialog(
+                            bookmarks = state.bookmarks,
+                            currentBookmarkId = state.currentBookmark,
+                            onDismiss = { mainViewModel.onAction(ResultPageAction.DismissDialog) },
+                            onAction = { mainViewModel.onAction(it) }
+                        )
+                    }
+                }
+            }
+        }
 
         val navHostFragment =
             supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment

@@ -54,15 +54,14 @@ object AppUtils {
             .split(Regex("\\n"))
             .joinToString("") { paragraph ->
                 if (paragraph.trim().isNotBlank()) {
-                    paragraph.split(Regex("(?<=(?<!\\.)\\.)(?=\\s+)"))
-                        .joinToString("") { "<p>${it}</p>" } + "</br>"
+                    "<p>${paragraph.trim()}</p>"
                 } else {
-                    "</br>"
+                    "<br />"
                 }
             }
     }
 
-    fun String.toLibraryKey(): String {
+    fun String.toBookmarkKey(): String {
         val sanitized = this.uppercase()
             .replace(" ", "_")
             .replace(Regex("[^A-Z0-9_]"), "")

@@ -63,7 +63,6 @@
     <string name="show_app_updates">Show app updates</string>
     <string name="show_app_updates_desc">Automatically search for new updates on start</string>
     <string name="external_reader">External reader</string>
-    <string name="reader">External reader</string>
     <string name="external_reader_desc">Use an external app to read</string>
     <string name="remove_bloat">Remove Bloat</string>
     <string name="remove_bloat_desc">Removes the title and translator from all pages, will cause longer generation time</string>
@@ -271,6 +270,8 @@
     <string name="sleep_format_stop">TTS will stop in %d min</string>
     <string name="google_translate">Google translate</string>
     <string name="online_translate">Online translation</string>
+    <string name="translate_from">Translate from language</string>
+    <string name="translate_to">Translate to language</string>
     <string name="downloading_language">Downloading language</string>
     <string name="toWhatLanguague">-></string>
     <string name="start_chapter">Skipped chapters</string>
@@ -350,21 +351,10 @@
     <string name="updates_watch">Watch</string>
     <string name="updates_watching">Watching</string>
     <string name="updates_title">Novel Updates</string>
-    <string name="updates_check_all">Check All</string>
     <string name="updates_check_now">Check now</string>
-    <string name="updates_add_novels">Add novels</string>
     <string name="updates_mark_seen">Mark as seen</string>
-    <string name="updates_checking">Checking&#8230;</string>
-    <string name="updates_not_checked">Not checked yet — tap sync to check</string>
-    <string name="updates_check_failed">Check failed — tap sync to retry</string>
     <string name="updates_new_chapters">%1$d new chapters (%2$d total)</string>
-    <string name="updates_up_to_date">Up to date (%1$d chapters)</string>
-    <string name="updates_empty_title">No updates</string>
-    <string name="updates_empty_hint">Tap + to add novels from your library to monitor for new chapters.</string>
-    <string name="updates_all_added">All library novels are already in your watch list.</string>
-    <string name="updates_remove_confirm">Remove "%s" from the watch list?</string>
-    <string name="updates_open_screen">Novel Updates</string>
-    <string name="updates_remove">Remove from watch list</string>
+
     <!-- Novel Auto-Update Settings -->
     <string name="novel_auto_update_category">Notifications</string>
     <string name="novel_auto_update_enabled_title">New chapter notifications</string>
@@ -379,7 +369,7 @@
     <string name="novel_updates_channel_name">Novel Updates</string>
     <string name="novel_updates_channel_desc">Notifies when watched novels have new chapters</string>
     <!-- Notification content -->
-    <string name="novel_updates_notification_title">📚 New chapters available!</string>
+    <string name="novel_updates_notification_title">New chapters available!</string>
     <string name="novel_updates_notification_body_single">%1$s has new chapters</string>
     <string name="novel_updates_notification_body_multi">%1$d novels have new chapters</string>
     <!-- Keys (not translatable) -->
@@ -390,8 +380,4 @@
         <item quantity="one">%1$d new chapter available</item>
         <item quantity="other">%1$d new chapters available</item>
     </plurals>
-    <!-- Filter options to watch list -->
-    <string name="updates_filter_all">All</string>
-    <string name="updates_filter_watching">Watching</string>
-    <string name="updates_filter_not_watching">Not Watching</string>
 </resources>

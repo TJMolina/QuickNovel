@@ -9,6 +9,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalGridApi
+import androidx.compose.foundation.layout.Grid
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +29,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,12 +40,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -50,6 +55,7 @@ import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.NotificationHelper.etaToString
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.compose.BaseStyles
+import com.lagradost.quicknovel.compose.CloudStreamTheme
 import com.lagradost.quicknovel.compose.CloudStreamTheme.colors
 import com.lagradost.quicknovel.compose.RoundedImageShape
 import com.lagradost.quicknovel.compose.animatedOutline
@@ -57,6 +63,7 @@ import com.lagradost.quicknovel.compose.circle
 import com.lagradost.quicknovel.compose.isLandscape
 import com.lagradost.quicknovel.compose.ripple
 import com.lagradost.quicknovel.compose.rounded
+import com.lagradost.quicknovel.tachiyomi.InfoWidget
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
@@ -97,7 +104,6 @@ fun SearchList(
     modifier: Modifier,
     items: ImmutableList<ImmutableSearchResponse>,
     searchAction: (SearchResponseAction) -> Unit,
-    //footer: @Composable (() -> Unit)? = null,
 ) {
     if (isRow) {
         SearchListRow(
@@ -225,7 +231,8 @@ fun SearchResponseRow(
                     },
                     onLongClick = {
                         action(SearchResponseAction(response, SearchResponseOperation.Metadata))
-                    }).ripple(openInteractionSource)
+                    })
+                .ripple(openInteractionSource)
         )
 
         Column(
@@ -238,23 +245,26 @@ fun SearchResponseRow(
             Text(
                 response.name,
                 maxLines = 2,
-                style = BaseStyles.textStyle,
+                color = colors.onBackground,
+                fontSize = 14.sp,
+                lineHeight = 15.sp,
                 overflow = TextOverflow.Ellipsis
             )
 
-            if (response.downloadState != null && response.downloadState.progress != response.downloadState.total) {
-                Text(
+            val text =
+                if (response.downloadState != null && response.downloadState.progress != response.downloadState.total) {
                     "${response.downloadState.progress}/${response.downloadState.total}${
-                        response.downloadState.etaMs?.let {
+                        if (response.downloadState.etaMs != null && response.downloadState.status == DownloadState.IsDownloading) {
                             " • " + etaToString(
-                                it
+                                response.downloadState.etaMs
                             )
-                        } ?: ""
-                    }", style = BaseStyles.textAltStyle)
-            } else if (response.chapters != null) {
-                if (response.id != null && response.downloadState == null) {
-                    // Do not show response.chaptersRead for downloaded items, as it looks weird
-                    Text(
+                        } else {
+                            ""
+                        }
+                    }"
+                } else if (response.chapters != null) {
+                    if (response.id != null && response.downloadState == null) {
+                        // Do not show response.chaptersRead for downloaded items, as it looks weird
                         "${response.chaptersRead}/${response.chapters} ${
                             stringResource(
                                 if (response.chapters == 1L) {
@@ -263,11 +273,8 @@ fun SearchResponseRow(
                                     R.string.chapters
                                 }
                             )
-                        }",
-                        style = BaseStyles.textAltStyle
-                    )
-                } else {
-                    Text(
+                        }"
+                    } else {
                         "${response.chapters} ${
                             stringResource(
                                 if (response.chapters == 1L) {
@@ -276,14 +283,18 @@ fun SearchResponseRow(
                                     R.string.chapters
                                 }
                             )
-                        }",
-                        style = BaseStyles.textAltStyle
-                    )
+                        }"
+                    }
+                } else {
+                    response.latestChapterName
                 }
-            } else if (response.latestChapterName != null) {
+
+            if (text != null) {
                 Text(
-                    response.latestChapterName,
-                    style = BaseStyles.textAltStyle
+                    text,
+                    color = colors.onSurfaceVariant,
+                    fontSize = 14.sp,
+                    lineHeight = 15.sp,
                 )
             }
         }
@@ -378,15 +389,7 @@ fun RefreshButton(
         DownloadState.Nothing -> R.drawable.arrow_circle_down_24px
     }
 
-    val operation = when (response.downloadState.status) {
-        DownloadState.IsDownloading -> SearchResponseOperation.Pause
-        DownloadState.IsPaused -> SearchResponseOperation.Resume
-        DownloadState.IsStopped -> SearchResponseOperation.Download
-        DownloadState.IsFailed -> SearchResponseOperation.Download
-        DownloadState.IsDone -> SearchResponseOperation.Download
-        DownloadState.IsPending -> return
-        DownloadState.Nothing -> SearchResponseOperation.Download
-    }
+    val operation = response.downloadState.operation
 
     Icon(
         painter = painterResource(icon),
@@ -468,7 +471,7 @@ fun Modifier.downloadOutline(downloadState: DownloadState?): Modifier {
 fun SearchResponseItem(
     response: ImmutableSearchResponse,
     action: (SearchResponseAction) -> Unit,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val imageRequest = response.imageRequest()
@@ -520,7 +523,7 @@ fun SearchResponseItem(
                             Text(
                                 text = "${response.chaptersRead}/${response.chapters}",
                                 color = Color.White,
-                                style = TextStyle(fontSize = 12.sp),
+                                fontSize = 12.sp, lineHeight = 12.sp
                             )
                         }
                     } else if (response.epubSize != null && response.hasNewChapters) {
@@ -533,7 +536,7 @@ fun SearchResponseItem(
                             Text(
                                 text = "+${(response.downloadState.progress - response.epubSize)}",
                                 color = colors.background,
-                                style = TextStyle(fontSize = 12.sp),
+                                fontSize = 12.sp, lineHeight = 12.sp
                             )
                         }
                     }
@@ -549,11 +552,13 @@ fun SearchResponseItem(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = response.name, style = TextStyle(
-                    color = colors.onBackground,
-                    fontSize = 13.sp,
-                    lineHeight = 14.sp,
-                ), maxLines = 2, textAlign = TextAlign.Center, overflow = TextOverflow.Ellipsis
+                text = response.name,
+                fontSize = 13.sp,
+                lineHeight = 14.sp,
+                color = colors.onBackground,
+                maxLines = 2,
+                textAlign = TextAlign.Center,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -598,6 +603,7 @@ fun SearchResponseGrid(
     }
 }
 
+@OptIn(ExperimentalGridApi::class)
 @Composable
 fun SearchResponseGrid(
     listState: LazyGridState = rememberLazyGridState(),
@@ -625,6 +631,27 @@ fun SearchResponseGrid(
                     .fillMaxWidth()
                     .wrapContentHeight()
             )
+        }
+    }
+
+}
+
+@PreviewLightDark
+@Composable
+private fun RowPreview() {
+    CloudStreamTheme {
+        Surface {
+            SearchResponseRow(response = ImmutableSearchResponse.preview(), action = {})
+        }
+    }
+}
+
+@PreviewLightDark
+@Composable
+private fun GridPreview() {
+    CloudStreamTheme {
+        Surface {
+            SearchResponseItem(response = ImmutableSearchResponse.preview(), action = {})
         }
     }
 }

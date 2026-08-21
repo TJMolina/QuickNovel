@@ -492,7 +492,6 @@ class ResultViewModel : ViewModel() {
                     System.currentTimeMillis(),
                     synopsis = load.synopsis,
                     posterHeaders = load.posterHeaders,
-                    status = load.status?.resource
                 )
             )
         }
@@ -555,7 +554,6 @@ class ResultViewModel : ViewModel() {
                 System.currentTimeMillis(),
                 synopsis = load.synopsis,
                 posterHeaders = load.posterHeaders,
-                status = load.status?.resource
             )
         )
     }
@@ -722,7 +720,6 @@ class ResultViewModel : ViewModel() {
         )
         reCacheChapters()
         updateBookmarkData()
-        BookDownloader2.openChanged(novelId)
         hasLoaded = true
 
         // insert a download progress if not found

@@ -577,11 +577,6 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 override fun onTabReselected(tab: TabLayout.Tab?) {}
             })
 
-            //bell to watch a novel. Toggle status.
-            resultWatch.setOnClickListener {
-                viewModel.changeWatchingStatus()
-            }
-
             //show bottom dialog with libraries
             resultBookmark.setOnClickListener { view ->
                 /*
@@ -667,12 +662,6 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
             }
         }
 
-        observe(viewModel.libraryId) { libraryId ->
-            val context = binding.root.context
-            binding.resultBookmark.text = context.getBookmarks().firstOrNull { it.id == libraryId }?.title ?: context.getString(R.string.bookmark)
-            binding.resultBookmark.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0,
-                if (libraryId == 0) R.drawable.ic_baseline_bookmark_border_24 else R.drawable.ic_baseline_bookmark_24)
-        }
         observe(viewModel.loadResponse, ::newState)
 
         binding.chapterList.apply {
@@ -680,25 +669,6 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
             val mainPageAdapter = ChapterAdapter(viewModel)
             adapter = mainPageAdapter
             setHasFixedSize(true)
-        }
-
-        //change bell status
-        observe(viewModel.isWatching){ isWatching ->
-                binding.resultWatch.apply {
-                    if(isWatching) {
-                        setCompoundDrawablesWithIntrinsicBounds(
-                            0, 0, 0,
-                            R.drawable.ic_baseline_notifications_active_24
-                        )
-                        text = getString(R.string.updates_watching)
-                    }
-                    else {
-                        setCompoundDrawablesWithIntrinsicBounds(0, 0, 0,
-                            R.drawable.ic_baseline_notifications_outline_24)
-                        text = getString(R.string.updates_watch)
-                    }
-                }
-
         }
 
 

@@ -102,11 +102,7 @@ class ChikariProvider : MainAPI() {
         }.orEmpty()
     }
 
-    override suspend fun loadReviews(
-        url: String,
-        page: Int,
-        showSpoilers: Boolean
-    ): List<UserReview> {
+    override suspend fun loadReviews(url: String, page: Int, data: String?): List<UserReview> {
         val slug = url.removeSuffix("/").substringAfterLast("/")
         val limit = 20
         val offset = (page - 1) * limit
@@ -117,7 +113,7 @@ class ChikariProvider : MainAPI() {
             UserReview(
                 review = comment.body,
                 username = comment.author.username,
-                reviewDate = comment.createdAt,
+                date = comment.createdAt,
                 avatarUrl = comment.author.avatarUrl
             )
         }.orEmpty()

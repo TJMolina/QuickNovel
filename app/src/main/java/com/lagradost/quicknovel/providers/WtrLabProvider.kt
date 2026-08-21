@@ -13,18 +13,18 @@ import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.fixUrlNull
 import com.lagradost.quicknovel.network.WebViewResolver
 import com.lagradost.quicknovel.newChapterData
+import com.lagradost.quicknovel.newReview
 import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.setStatus
 import com.lagradost.quicknovel.util.AppUtils.parseJson
-import java.util.concurrent.ConcurrentHashMap
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlin.math.roundToInt
 
 
-class  WtrLabProvider : MainAPI() {
+class WtrLabProvider : MainAPI() {
     override val mainUrl = "https://wtr-lab.com"
     override val name = "WTR-LAB"
     override val lang = "en"
@@ -32,15 +32,14 @@ class  WtrLabProvider : MainAPI() {
     override val hasMainPage = true
     override val usesCloudFlareKiller = true
     override val hasReviews = true
-    val novelsIdRequired = ConcurrentHashMap<String, String>()
-
     override val mainCategories = listOf(
         "All" to "all",
         "Ongoing" to "ongoing",
         "Completed" to "completed"
     )
+
     //&orderBy=
-    override val orderBys =listOf(
+    override val orderBys = listOf(
         "Date" to "date",
         "Name" to "name",
         "View" to "view",
@@ -114,9 +113,10 @@ class  WtrLabProvider : MainAPI() {
         orderBy: String?,
         tag: String?
     ): HeadMainPageResponse {
-        val url = "$mainUrl/en/novel-list?page=$page&status=$mainCategory&orderBy=$orderBy&genre=$tag"
+        val url =
+            "$mainUrl/en/novel-list?page=$page&status=$mainCategory&orderBy=$orderBy&genre=$tag"
         val doc = app.get(url).document
-        val returnValue =  doc.select(".series-list>div").mapNotNull { select ->
+        val returnValue = doc.select(".series-list>div").mapNotNull { select ->
             val titleHolder = select.selectFirst("a") ?: return@mapNotNull null
             val href = titleHolder.attr("href")
             val name = titleHolder.attr("title")
@@ -168,7 +168,6 @@ class  WtrLabProvider : MainAPI() {
         val jsonNode = doc.selectFirst("#__NEXT_DATA__")
         val json = jsonNode?.data() ?: throw ErrorLoadingException("no chapters")
         val chaptersJson = parseJson<ResultJsonResponse.Root>(json)
-        novelsIdRequired[url] = chaptersJson.props.pageProps.serie.serieData.id.toString()
 
         val chapters = mutableListOf<ChapterData>()
         chapters.addAll(
@@ -179,12 +178,13 @@ class  WtrLabProvider : MainAPI() {
                 chaptersJson.props.pageProps.serie.serieData.rawChapterCount
             )
         )
+        val id = chaptersJson.props.pageProps.serie.serieData.id.toString()
         return newStreamResponse(title, url, chapters) {
             synopsis = doc.selectFirst(".desc-wrap")?.text()
             posterUrl = fixUrlNull(doc.selectFirst(".image-wrap > img")?.attr("src"))
             val details = doc.select("div.detail-buttons div")
-            details.map{div ->
-                if(div.text().contains("Views")){
+            details.forEach { div ->
+                if (div.text().contains("Views")) {
                     val text = div.ownText().split(" ")
                     this.views = text.getOrNull(2)?.trim()?.toIntOrNull()
                     setStatus(text.getOrNull(0)?.trim())
@@ -201,11 +201,13 @@ class  WtrLabProvider : MainAPI() {
                     it.times(20).times(10).roundToInt()
                 }
             }
-            related = getRelated(url)
+            reviewData = id
+            related = getRelated(url, id)
         }
     }
-    suspend fun getRelated(url: String): List<SearchResponse> {
-        val url = "$mainUrl/api/v2/novel/similar/${novelsIdRequired[url]}"
+
+    suspend fun getRelated(url: String, id: String): List<SearchResponse> {
+        val url = "$mainUrl/api/v2/novel/similar/$id"
         val response = app.get(url).parsedSafe<RelatedResponse>()
 
         return response?.data?.map { item ->
@@ -223,21 +225,20 @@ class  WtrLabProvider : MainAPI() {
             }
         } ?: emptyList()
     }
-    override suspend fun loadReviews(
-        url: String,
-        page: Int,
-        showSpoilers: Boolean
-    ): List<UserReview> {
-        val realUrl = "$mainUrl/api/review/get?serie_id=${novelsIdRequired[url]}&page=${page - 1}&sort=most_liked"
+
+    override suspend fun loadReviews(url: String, page: Int, data: String?): List<UserReview> {
+        val id = data ?: return emptyList()
+        val realUrl =
+            "$mainUrl/api/review/get?serie_id=$id&page=${page - 1}&sort=most_liked"
         val res = app.get(realUrl).parsedSafe<ReviewResponse>()
         return res?.data?.mapNotNull { item ->
             val reviewTxt = item.comment ?: return@mapNotNull null
-            UserReview(
-                review = reviewTxt,
-                username = item.username ?: "User",
-                reviewDate = item.createdAt,
+
+            newReview(reviewTxt) {
+                username = item.username
+                date = item.createdAt
                 rating = item.rate?.times(200)
-            )
+            }
         } ?: emptyList()
     }
 
@@ -250,17 +251,17 @@ class  WtrLabProvider : MainAPI() {
             val chaptersJson = parseJson<LoadJsonResponse.Root>(json)
             val chapter = chaptersJson.props.pageProps.serie
 
-            val root = app.post(
-                "$mainUrl/api/reader/get", data = mapOf(
-                    "chapter_id" to chapter.chapter.id.toString(),
-                    "chapter_no" to chapter.chapter.slug.toString(),
-                    "force_retry" to "false",
-                    "language" to "en",
-                    "raw_id" to chapter.serieData.rawId.toString(),
-                    "retry" to "false",
-                    "translate" to "web",
-                )
-            ).parsed<LoadJsonResponse2.Root>()
+        val root = app.post(
+            url = "$mainUrl/api/reader/get", data = mapOf(
+                "chapter_id" to chapter.chapter.id.toString(),
+                "chapter_no" to chapter.serieData.slug,
+                "force_retry" to "false",
+                "language" to "en",
+                "raw_id" to chapter.serieData.rawId.toString(),
+                "retry" to "false",
+                "translate" to "web",
+            )
+        ).parsed<LoadJsonResponse2.Root>()
 
             val paragraphs = decryptContent(root.data.data.body)
             val text = StringBuilder()
@@ -345,6 +346,7 @@ class  WtrLabProvider : MainAPI() {
         @JsonProperty("title") val title: String,
         @JsonProperty("image") val image: String? = null,
     )
+
     data class ReviewResponse(
         @JsonProperty("success") val success: Boolean? = null,
         @JsonProperty("data") val data: List<ReviewItem>? = null
@@ -362,6 +364,7 @@ class  WtrLabProvider : MainAPI() {
         data class Root(
             val chapters: List<Chapter>,
         )
+
         data class Chapter(
             @JsonProperty("serie_id")
             val serieId: Long,
@@ -473,12 +476,6 @@ class  WtrLabProvider : MainAPI() {
             val requestedMember: String,
             @JsonProperty("requested_role")
             val requestedRole: Long,*/
-        )
-
-        data class Raw(
-            val title: String,
-            val author: String,
-            val description: String,
         )
 
         /*data class Ranks(
@@ -678,11 +675,12 @@ class  WtrLabProvider : MainAPI() {
             val buildId: String,
             val isFallback: Boolean,
             val isExperimentalCompile: Boolean,
-            val gssp: Boolean,/*
-        val locale: String,
-        val locales: List<String>,
-        val defaultLocale: String,
-        val scriptLoader: List<Any?>,*/
+            val gssp: Boolean,
+            /*
+                    val locale: String,
+                    val locales: List<String>,
+                    val defaultLocale: String,
+                    val scriptLoader: List<Any?>,*/
         )
 
         data class Props(
@@ -726,6 +724,7 @@ class  WtrLabProvider : MainAPI() {
             val title: String,
             val code: String,*/
         )
+
         data class Serie(
             @JsonProperty("serie_data")
             val serieData: SerieData,
@@ -768,6 +767,7 @@ class  WtrLabProvider : MainAPI() {
             val author: String,
             val description: String,
         )
+
         data class Query(
             val locale: String,
             @JsonProperty("serie_slug")
@@ -775,6 +775,5 @@ class  WtrLabProvider : MainAPI() {
             @JsonProperty("chapter_no")
             val chapterNo: String,
         )
-
     }
 }

@@ -8,8 +8,6 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.lagradost.quicknovel.APIRepository
 import com.lagradost.quicknovel.BookDownloader2
-import com.lagradost.quicknovel.MainActivity
-import com.lagradost.quicknovel.MainActivity.Companion.loadResult
 import com.lagradost.quicknovel.compose.ActionHandler
 import com.lagradost.quicknovel.compose.DefaultEffectContainer
 import com.lagradost.quicknovel.compose.DefaultStateContainer

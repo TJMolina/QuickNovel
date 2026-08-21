@@ -13,39 +13,9 @@ import com.lagradost.quicknovel.DataStore.getKeys
 import com.lagradost.quicknovel.DataStore.removeKey
 import com.lagradost.quicknovel.DataStore.removeKeys
 import com.lagradost.quicknovel.DataStore.setKey
-import com.lagradost.quicknovel.NotificationHelper.createNotificationChannels
-import com.lagradost.quicknovel.mvvm.logError
-import com.lagradost.quicknovel.util.ResultCached
 import java.lang.ref.WeakReference
-import com.lagradost.quicknovel.ui.updates.services.NovelAutoUpdateScheduler
 
 class BaseApplication : Application(), SingletonImageLoader.Factory, Configuration.Provider  {
-    override fun onCreate() {
-        super.onCreate()
-        //clean corrupted books
-        cleanLegacyCorruptBookmarks()
-        this.createNotificationChannels()
-        //check worker for updates
-        NovelAutoUpdateScheduler.apply(this)
-    }
-    private fun cleanLegacyCorruptBookmarks() {
-        try {
-            val ctx: Context = applicationContext
-            with(DataStore) {
-                ctx.getKeys(RESULT_BOOKMARK_STATE).forEach { stateKey ->
-                    val bookKey = stateKey.replaceFirst(RESULT_BOOKMARK_STATE, RESULT_BOOKMARK)
-                    val book = ctx.getKey<ResultCached>(bookKey)
-                    val isCorrupt = book == null || (book.name as String?)?.isBlank() != false
-                    if (isCorrupt) {
-                        ctx.removeKey(stateKey)
-                        ctx.removeKey(bookKey)
-                    }
-                }
-            }
-        } catch (t: Throwable) {
-            logError(t)
-        }
-    }
     override fun attachBaseContext(base: Context?) {
         super.attachBaseContext(base)
         context = base

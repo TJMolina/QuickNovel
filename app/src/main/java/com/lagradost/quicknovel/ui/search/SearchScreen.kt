@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.lagradost.quicknovel.MainAPI
+import com.lagradost.quicknovel.MainActivity.Companion.loadResult
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.compose.BaseSearchBar
 import com.lagradost.quicknovel.compose.CloudStreamTheme
@@ -55,9 +56,12 @@ import com.lagradost.quicknovel.compose.MultiSelectDialog
 import com.lagradost.quicknovel.compose.isLandscape
 import com.lagradost.quicknovel.compose.ripple
 import com.lagradost.quicknovel.compose.rounded
+import com.lagradost.quicknovel.getBookmarks
 import com.lagradost.quicknovel.tachiyomi.AndroidPreferenceStore
 import com.lagradost.quicknovel.ui.common.SearchResponseAction
 import com.lagradost.quicknovel.ui.common.SearchResponseItem
+import com.lagradost.quicknovel.ui.result.preview.BookmarkSelectionDialog
+import com.lagradost.quicknovel.ui.result.preview.BottomPreviewDialog
 import com.lagradost.quicknovel.ui.mainpage.SearchResponseDialog
 import com.lagradost.quicknovel.ui.settings.searchProvidersList
 import com.lagradost.quicknovel.util.Apis.Companion.apis
@@ -67,7 +71,6 @@ import kotlinx.collections.immutable.toPersistentSet
 
 @Composable
 fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
-    ShowDialog(state.filterLanguages, state.isConfigureShow, action)
     BackHandler(state.isQueryOpen) {
         action(HomeAction.CloseQuery)
     }
@@ -81,14 +84,20 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
             action(HomeAction.ResultAction(item))
         }
     }
-    val dismissAction = remember(action) {
-        {
-            action(HomeAction.CloseRow)
-        }
-    }
 
-    if (state.openRow != null) {
-        SearchResponseDialog(state.openRow, action = searchAction, dismiss = dismissAction)
+    when (val dialog = state.activeDialog) {
+        null -> {}
+        HomeDialog.ConfigureApis -> {
+            ShowDialog(state.filterLanguages, action)
+        }
+
+        is HomeDialog.SearchRowDialog -> {
+            SearchResponseDialog(
+                dialog.row,
+                action = searchAction,
+                dismiss = { action(HomeAction.DismissDialog) }
+            )
+        }
     }
 
     Scaffold(
@@ -184,10 +193,8 @@ fun SearchScreen(state: HomeViewModelState, action: (HomeAction) -> Unit) {
 
 @Composable
 fun ShowDialog(
-    filterLanguages: ImmutableSet<String>, isDialogShown: Boolean, action: (HomeAction) -> Unit
+    filterLanguages: ImmutableSet<String>, action: (HomeAction) -> Unit
 ) {
-    if (!isDialogShown) return
-
     val entries = remember(filterLanguages) {
         apis.filter { api -> filterLanguages.contains(api.lang) }.associate { it.name to it.name }
             .toPersistentMap()
@@ -206,11 +213,11 @@ fun ShowDialog(
         confirmText = stringResource(R.string.ok),
         confirm = { selection: Set<String> ->
             apisSettings.set(selection)
-            action(HomeAction.DismissConfigureApis)
+            action(HomeAction.DismissDialog)
         },
         dismissText = stringResource(R.string.cancel),
         dismiss = {
-            action(HomeAction.DismissConfigureApis)
+            action(HomeAction.DismissDialog)
         },
         selectedKeys = keys,
     )

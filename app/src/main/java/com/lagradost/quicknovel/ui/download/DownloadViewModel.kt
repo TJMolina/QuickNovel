@@ -22,7 +22,7 @@ import com.lagradost.quicknovel.BookDownloader2.downloadProgressChanged
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE_PDF
 import com.lagradost.quicknovel.CURRENT_TAB
 import com.lagradost.quicknovel.CommonActivity.activity
-import com.lagradost.quicknovel.DEFAULT_LIBRARIES
+import com.lagradost.quicknovel.DEFAULT_BOOKMARKS
 import com.lagradost.quicknovel.DOWNLOAD_EPUB_LAST_ACCESS
 import com.lagradost.quicknovel.DOWNLOAD_NORMAL_SORTING_METHOD
 import com.lagradost.quicknovel.DOWNLOAD_SETTINGS
@@ -36,7 +36,7 @@ import com.lagradost.quicknovel.MainActivity.Companion.loadResult
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.RESULT_BOOKMARK
 import com.lagradost.quicknovel.RESULT_BOOKMARK_STATE
-import com.lagradost.quicknovel.getLibraries
+import com.lagradost.quicknovel.getBookmarks
 import com.lagradost.quicknovel.mvvm.launchSafe
 import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
@@ -95,7 +95,7 @@ class DownloadViewModel : ViewModel() {
         )
     }
 
-    val libraries get() = context?.getLibraries() ?: DEFAULT_LIBRARIES
+    val libraries get() = context?.getBookmarks() ?: DEFAULT_BOOKMARKS
 
     var activeQuery: String = ""
     val _pages: MutableLiveData<List<Page>> = MutableLiveData(null)
@@ -518,6 +518,7 @@ class DownloadViewModel : ViewModel() {
                         generating = false,
                         lastUpdated = value.lastUpdated,
                         lastDownloaded = value.lastDownloaded,
+                        status = value.status
                     )
                 }
             }
@@ -548,6 +549,7 @@ class DownloadViewModel : ViewModel() {
                         generating = false,
                         lastUpdated = value.lastUpdated,
                         lastDownloaded = value.lastDownloaded,
+                        status = value.status
                     )
                 }
             }

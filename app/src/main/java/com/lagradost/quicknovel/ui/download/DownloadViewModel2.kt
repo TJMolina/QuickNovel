@@ -1,8 +1,6 @@
 package com.lagradost.quicknovel.ui.download
 
-import android.app.Application
 import androidx.compose.runtime.Immutable
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lagradost.quicknovel.BaseApplication
 import com.lagradost.quicknovel.BaseApplication.Companion.getKey
@@ -51,6 +49,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.collections.mapNotNull
+import kotlin.uuid.ExperimentalUuidApi
 
 @Immutable
 data class DownloadPageState(
@@ -75,6 +74,7 @@ sealed class DownloadDialog {
 @Immutable
 sealed class DownloadPageAction {
     object Refresh : DownloadPageAction()
+    object Import : DownloadPageAction()
     data class Search(val query: String) : DownloadPageAction()
     data class ResultAction(val action: SearchResponseAction) : DownloadPageAction()
     object ShowSorting : DownloadPageAction()
@@ -87,7 +87,8 @@ sealed class DownloadPageAction {
     data class SelectPage(val page: Int) : DownloadPageAction()
 }
 
-class DownloadViewModel2 : ViewModel(), ActionHandler<DownloadPageAction>,
+class DownloadViewModel2 : ViewModel(),
+    ActionHandler<DownloadPageAction>,
     StateContainer<DownloadPageState> by DefaultStateContainer(DownloadPageState()) {
     val readList get() = BaseApplication.context?.getBookmarks()?: DEFAULT_BOOKMARKS
     private val searchPipe = DebounceQuery()
@@ -102,6 +103,10 @@ class DownloadViewModel2 : ViewModel(), ActionHandler<DownloadPageAction>,
                         refreshPage(page)
                     }
                 }
+            }
+
+            DownloadPageAction.Import -> {
+                com.lagradost.quicknovel.MainActivity.importEpub()
             }
 
             is DownloadPageAction.Search -> {
@@ -228,24 +233,29 @@ class DownloadViewModel2 : ViewModel(), ActionHandler<DownloadPageAction>,
 
     private fun readEpub(response: ImmutableSearchResponse) = viewModelScope.launch {
         withContext(Dispatchers.Default) {
-            val id = response.id!!
-            val downloadState = response.downloadState!!
+            val id = response.id ?: return@withContext
+            val isImported = response.isImported
+            val downloadedCount = response.downloadState?.progress?.toInt() ?: response.epubSize ?: 0
+
             try {
-                updateState {
-                    copy(pages = pages.updateRow(0) {
-                        update(id) {
-                            copy(generating = true)
-                        }
-                    })
+                if (!isImported) {
+                    updateState {
+                        copy(pages = pages.updateRow(0) {
+                            update(id) {
+                                @OptIn(ExperimentalUuidApi::class)
+                                copy(generating = true)
+                            }
+                        })
+                    }
                 }
 
-                if (response.isImported && downloadState.progress < downloadState.total) {
+                if (isImported && response.downloadState != null && response.downloadState.progress < response.downloadState.total) {
                     BookDownloader2.preloadPartialImportedPdf(response)
                 }
 
                 BookDownloader2.readEpub(
                     id,
-                    downloadState.progress.toInt(),
+                    downloadedCount,
                     response.author,
                     response.name,
                     response.apiName,
@@ -447,6 +457,7 @@ class DownloadViewModel2 : ViewModel(), ActionHandler<DownloadPageAction>,
         BookDownloader2.refreshingChanged += this::onRefreshingChanged
         BookDownloader2.chapterReadChanged += this::onChapterChanged
         BookDownloader2.openChanged += this::onOpen
+        BookDownloader2.refreshingChanged += this::onRefreshingChanged
         BookDownloader2.updatePagesDetails += this::onPagesChanged
     }
 
@@ -457,6 +468,7 @@ class DownloadViewModel2 : ViewModel(), ActionHandler<DownloadPageAction>,
         BookDownloader2.bookmarkChanged -= this::onBookmarkChanged
         BookDownloader2.refreshingChanged -= this::onRefreshingChanged
         BookDownloader2.updatePagesDetails -= this::onPagesChanged
+        BookDownloader2.refreshingChanged -= this::onRefreshingChanged
         BookDownloader2.chapterReadChanged -= this::onChapterChanged
         BookDownloader2.openChanged -= this::onOpen
     }

@@ -40,6 +40,7 @@ import com.lagradost.quicknovel.BookDownloader2Helper.sanitizeFilename
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.DOWNLOAD_EPUB_LAST_ACCESS
 import com.lagradost.quicknovel.DOWNLOAD_EPUB_SIZE
+import com.lagradost.quicknovel.DefaultBookmark
 import com.lagradost.quicknovel.DownloadExtractLink
 import com.lagradost.quicknovel.DownloadLink
 import com.lagradost.quicknovel.DefaultLibrary
@@ -255,6 +256,7 @@ data class ImmutableSearchResponse(
     val chaptersRead: Int,
     val loadData: ImmutableLoadData? = null,
     val reviewData: String? = null,
+    val statusRes: Int? = null,
 ) {
 
     fun matchesQuery(query: String): Boolean =
@@ -456,7 +458,9 @@ data class ImmutableSearchResponse(
                 tags = response.tags?.toPersistentList(),
                 posterHeaders = response.posterHeaders?.toImmutableMap(),
                 timeOfCached = System.currentTimeMillis(),
+                timeOfPageOpened = timeOfPageOpened(id),
                 chaptersRead = chaptersRead(response.name),
+                statusRes = response.status?.resource,
                 downloadState = ImmutableDownloadState.from(currentDownloadProgress)
             )
         }
@@ -475,6 +479,7 @@ data class ImmutableSearchResponse(
                 totalChapters = cache.totalChapters.toLong(),
                 author = cache.author,
                 synopsis = cache.synopsis,
+                statusRes = cache.status,
                 timeOfPageOpened = timeOfPageOpened(cache.id),
                 chaptersRead = chaptersRead(cache.name)
             )
@@ -498,6 +503,7 @@ data class ImmutableSearchResponse(
                 downloadState = downloadState,
                 synopsis = cache.synopsis,
                 tags = cache.tags?.toImmutableList(),
+                statusRes = cache.status,
                 timeOfPageOpened = timeOfPageOpened(id),
                 epubSize = epubSize(id),
                 chaptersRead = chaptersRead(cache.name)
@@ -506,7 +512,7 @@ data class ImmutableSearchResponse(
 
     fun doAction(operation: SearchResponseOperation) {
         when (operation) {
-            SearchResponseOperation.Open -> loadResult(url, apiName)
+            SearchResponseOperation.Open -> loadResult(this)
             SearchResponseOperation.Metadata -> {
                 MainActivity.loadPreviewPage(this)
             }

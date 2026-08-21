@@ -182,6 +182,7 @@ fun BottomPreviewContent(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     response.rating?.let { ResultInfoText(context.getRating(it)) }
+                    response.statusRes?.let { ResultInfoText(stringResource(it), color = colors.primary) }
                     response.chapters?.let { chapters ->
                         val chaptersText = "$chapters " + stringResource(if (chapters == 1L) R.string.chapter else R.string.chapters)
                         ResultInfoText(chaptersText)

@@ -19,38 +19,6 @@ import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.compose.CloudStreamTheme
 import com.lagradost.quicknovel.compose.loadPrimaryColor
 import com.lagradost.quicknovel.compose.loadThemeMode
-import com.lagradost.quicknovel.databinding.FragmentDownloadsBinding
-import com.lagradost.quicknovel.databinding.SortBottomSheetBinding
-import com.lagradost.quicknovel.mvvm.observe
-import com.lagradost.quicknovel.tachiyomi.AndroidPreferenceStore
-import com.lagradost.quicknovel.tachiyomi.collectAsState
-import com.lagradost.quicknovel.ui.BaseFragment
-import com.lagradost.quicknovel.ui.SortingMethodAdapter
-import com.lagradost.quicknovel.ui.UiImage
-import com.lagradost.quicknovel.ui.img
-import com.lagradost.quicknovel.ui.mainpage.MainPageFragment
-import com.lagradost.quicknovel.ui.search.HomeAction
-import com.lagradost.quicknovel.ui.search.HomeEffect
-import com.lagradost.quicknovel.ui.search.HomeViewModel2
-import com.lagradost.quicknovel.ui.search.SearchScreen
-import com.lagradost.quicknovel.ui.settings.searchLangList
-import com.lagradost.quicknovel.ui.settings.searchProvidersList
-import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
-import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
-import kotlinx.collections.immutable.toPersistentSet
-import kotlinx.coroutines.launch
-import androidx.appcompat.content.res.AppCompatResources
-import androidx.core.view.isVisible
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.repeatOnLifecycle
-import com.lagradost.quicknovel.DefaultLibrary
-import com.lagradost.quicknovel.MainActivity
-import com.lagradost.quicknovel.ui.updates.data.UpdatesManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.withContext
-
 
 class DownloadFragment : Fragment() {
     override fun onCreateView(
@@ -114,7 +82,9 @@ class DownloadFragment : Fragment() {
         @JsonProperty("lastDownloaded")
         val lastDownloaded: Long?,
         @JsonProperty("posterHeaders")
-        val posterHeaders : Map<String,String>? = null,
+        val posterHeaders: Map<String, String>? = null,
+        @JsonProperty("status")
+        val status : Int? = null,
     )
 
     data class DownloadDataLoaded(
@@ -137,18 +107,20 @@ class DownloadFragment : Fragment() {
         val generating: Boolean,
         val lastUpdated: Long?,
         val lastDownloaded: Long?,
+        val status: Int? = null,
     ) {
-        val isImported: Boolean get() = (apiName == IMPORT_SOURCE || apiName == IMPORT_SOURCE_PDF)}
-        /*val image by lazy {
-            if (isImported) {
-                val bitmap = BookDownloader2Helper.getCachedBitmap(activity, apiName, author, name)
-                if (bitmap != null) {
-                    return@lazy UiImage.Bitmap(bitmap)
-                }
-            }
-            img(posterUrl)
-        }*/
+        val isImported: Boolean get() = (apiName == IMPORT_SOURCE || apiName == IMPORT_SOURCE_PDF)
     }
+    /*val image by lazy {
+        if (isImported) {
+            val bitmap = BookDownloader2Helper.getCachedBitmap(activity, apiName, author, name)
+            if (bitmap != null) {
+                return@lazy UiImage.Bitmap(bitmap)
+            }
+        }
+        img(posterUrl)
+    }*/
+}
 /*
 class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
     BindingCreator.Inflate(FragmentDownloadsBinding::inflate)
@@ -186,7 +158,7 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
     lateinit var searchMagIcon: ImageView
     private var mediator: TabLayoutMediator? = null
     //This function is called every time pages.submitList is invoked to update a tab's name or state
-    private fun updateTabs(libraries: List<DefaultLibrary>) {
+    private fun updateTabs(libraries: List<DefaultBookmark>) {
         val binding = binding ?: return
         val context = context ?: return
 
@@ -205,37 +177,6 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
         activity?.fixPaddingStatusbar(binding.downloadRoot)
         //viewModel = ViewModelProviders.of(activity!!).get(DownloadViewModel::class.java)
 
-        val adapter = ViewpagerAdapter(viewModel, this) { isScrollingDown ->
-            if (isScrollingDown)
-                binding.downloadFab.shrink()
-            else
-                binding.downloadFab.extend()
-        }
-
-        binding.viewpager.adapter = adapter
-        //binding.viewpager.reduceDragSensitivity()
-
-        observe(viewModel.pages) { pages ->
-            adapter.submitList(pages)
-            viewModel.currentTab.value?.let {
-                if (it != binding.viewpager.currentItem) {
-                    binding.viewpager.setCurrentItem(it, false)
-                }
-            }
-
-            updateTabs(viewModel.libraries)
-        }
-
-        binding.bookmarkTabs.apply {
-            addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-                override fun onTabSelected(tab: TabLayout.Tab?) {
-                    //binding.swipeContainer.isEnabled = binding.bookmarkTabs.selectedTabPosition == 0
-                    viewModel.switchPage(binding.bookmarkTabs.selectedTabPosition)
-                }
-                override fun onTabUnselected(tab: TabLayout.Tab?) {}
-                override fun onTabReselected(tab: TabLayout.Tab?) {}
-            })
-        }
 
         searchExitIcon =
             binding.downloadSearch.findViewById(androidx.appcompat.R.id.search_close_btn)
@@ -255,6 +196,34 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
             }
         })
 
+
+        val adapter = ViewpagerAdapter(viewModel, this) { isScrollingDown ->
+            if (isScrollingDown)
+                binding.downloadFab.shrink()
+            else
+                binding.downloadFab.extend()
+        }
+
+        observe(viewModel.pages) { pages ->
+            adapter.submitList(pages)
+            viewModel.currentTab.value?.let {
+                if (it != binding.viewpager.currentItem) {
+                    binding.viewpager.setCurrentItem(it, false)
+                }
+            }
+
+            updateTabs(viewModel.libraries)
+        }
+
+        binding.viewpager.adapter = adapter
+        //binding.viewpager.reduceDragSensitivity()
+
+        binding.bookmarkTabs.apply {
+            addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+                override fun onTabSelected(tab: TabLayout.Tab?) {
+                    //binding.swipeContainer.isEnabled = binding.bookmarkTabs.selectedTabPosition == 0
+                    viewModel.switchPage(binding.bookmarkTabs.selectedTabPosition)
+                }
                 override fun onTabUnselected(tab: TabLayout.Tab?) {}
                 override fun onTabReselected(tab: TabLayout.Tab?) {}
             })
@@ -305,18 +274,6 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
 
         //swipe_container.setProgressBackgroundColorSchemeColor(requireContext().colorFromAttribute(R.attr.darkBackground))
 
-        //notifications button
-        binding.downloadUpdatesIcon.setOnClickListener {
-            activity.navigate(R.id.navigation_updates)
-        }
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                UpdatesManager.updateTick.collectLatest {
-                    updateBellTint()
-                }
-            }
-        }
-
         binding.swipeContainer.apply {
             setColorSchemeColors(context.colorFromAttribute(R.attr.colorPrimary))
             setProgressBackgroundColorSchemeColor(context.colorFromAttribute(R.attr.primaryGrayBackground))
@@ -330,7 +287,6 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
                 }
             }
         }
-
 
         observe(viewModel.isRefreshing) { refreshing ->
             if (refreshing != binding.swipeContainer.isRefreshing) {
@@ -382,27 +338,5 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
             }
         }*/
 
-    }
-    override fun onDestroy() {
-        (binding?.viewpager?.adapter as? ViewpagerAdapter)?.cleanReferences()
-        super.onDestroy()
-    }
-    private fun updateBellTint() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            val hasUpdate = withContext(Dispatchers.IO) {
-                UpdatesManager.getWatchList().any { it.hasUpdate }
-            }
-            binding?.apply {
-                context?.let{ ctx ->
-                    if (hasUpdate) {
-                        downloadUpdatesIcon.icon = AppCompatResources.getDrawable(ctx, R.drawable.ic_baseline_notifications_active_24)
-                        downloadUpdatesBadge.isVisible = true
-                    }else {
-                        downloadUpdatesIcon.icon = AppCompatResources.getDrawable(ctx, R.drawable.ic_baseline_notifications_24)
-                        downloadUpdatesBadge.isVisible = false
-                    }
-                }
-            }
-        }
     }
 }*/

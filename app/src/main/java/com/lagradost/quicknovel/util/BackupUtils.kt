@@ -13,6 +13,8 @@ import com.lagradost.quicknovel.DataStore.getSharedPrefs
 import com.lagradost.quicknovel.DataStore.mapper
 import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.FileHelper
+import com.lagradost.quicknovel.BOOKMARK_KEY
+import com.lagradost.quicknovel.mergeBookmarks
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.lang.System.currentTimeMillis
@@ -40,8 +42,13 @@ object BackupUtils {
         isEditingAppSettings: Boolean = false
     ) {
         val editor = DataStore.editor(this, isEditingAppSettings)
-        map?.forEach {
-            editor.setKeyRaw(it.key, it.value)
+        map?.forEach { (key, value)->
+            if(key == BOOKMARK_KEY && value is String){
+                mergeBookmarks(value)
+            }
+            else{
+                editor.setKeyRaw(key, value)
+            }
         }
         editor.apply()
     }

@@ -103,6 +103,7 @@ import com.lagradost.quicknovel.ui.common.SearchResponseOperation
 import com.lagradost.quicknovel.ui.common.html
 import com.lagradost.quicknovel.ui.common.loading
 import com.lagradost.quicknovel.ui.common.loadingLineMargin
+import com.lagradost.quicknovel.ui.result.preview.BookmarkSelectionDialog
 import com.lagradost.quicknovel.util.AppUtils.openInBrowser
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
 import com.lagradost.quicknovel.util.SettingsHelper.getRatingReview
@@ -161,36 +162,14 @@ fun ResultScreen(state: ResultState, action: (ResultPageAction) -> Unit) {
 }
 
 @Composable
-fun ResultScreenDialog(dialog: ResultDialog, action: (ResultPageAction) -> Unit) {
-    when (dialog) {
-        is ResultDialog.Bookmark -> {
-            SingleSelectDialog(
-                entries = ReadType.entries.associateWith { item -> stringResource(item.stringRes) },
-                dismiss = {
-                    action(ResultPageAction.DismissDialog)
-                },
-                title = stringResource(R.string.bookmark),
-                selectedKey = dialog.selected,
-                confirm = { selected ->
-                    action(ResultPageAction.SetBookmark(selected))
-                    action(ResultPageAction.DismissDialog)
-                })
-        }
-    }
-}
-
-@Composable
 fun ResultScreenImpl(
     padding: PaddingValues, state: ResultState, action: (ResultPageAction) -> Unit
 ) {
-    if (state.dialog != null) {
-        ResultScreenDialog(state.dialog, action)
-    }
-
     val response = state.response ?: return
     // val scrollState = rememberScrollState()
     val posterInteractionSource = remember { MutableInteractionSource() }
     val posterBigInteractionSource = remember { MutableInteractionSource() }
+    val currentBookmark = state.bookmarks.find { it.id == state.currentBookmark }
 
     val isPosterShown = remember { mutableStateOf(false) }
 
@@ -318,10 +297,10 @@ fun ResultScreenImpl(
                             .background(colors.surfaceContainer)
                     ) {
                         TextIcon(
-                            stringResource(if (state.bookmark == ReadType.NONE) R.string.bookmark else state.bookmark.stringRes),
-                            icon = if (state.bookmark == ReadType.NONE) R.drawable.ic_baseline_add_24 else R.drawable.ic_baseline_bookmark_24,
+                            currentBookmark?.title ?: stringResource(R.string.bookmark),
+                            icon = if (state.currentBookmark == 0) R.drawable.ic_baseline_add_24 else R.drawable.ic_baseline_bookmark_24,
                         ) {
-                            action(ResultPageAction.OpenBookmark)
+                            action(ResultPageAction.ShowBookmarkDialog)
                         }
                         TextIcon(
                             stringResource(R.string.download_open_action),
@@ -431,6 +410,15 @@ fun ResultScreenImpl(
                 contentDescription = stringResource(R.string.poster_descript),
             )
         }
+    }
+
+    if (state.dialogState?.isBookmarkSelectionOpen == true) {
+        BookmarkSelectionDialog(
+            bookmarks = state.bookmarks,
+            currentBookmarkId = state.currentBookmark,
+            onDismiss = { action(ResultPageAction.DismissDialog) },
+            onAction = { action(it) }
+        )
     }
 }
 

@@ -1373,25 +1373,20 @@ object BookDownloader2 {
     }
 
 
-    suspend fun getOldDataReadingProgress(currentTabIndex: Int) {
+    suspend fun getOldDataReadingProgress(currentBookmarkIndex: Int) {
+        if (currentBookmarkIndex <= 0) return   // Tab 0 = Downloads
         val keys = getKeys(RESULT_BOOKMARK_STATE) ?: return
-        val readList = arrayListOf(
-            ReadType.READING,
-            ReadType.READING,
-            ReadType.ON_HOLD,
-            ReadType.PLAN_TO_READ,
-            ReadType.COMPLETED,
-            ReadType.DROPPED,
-        )
+        val bookmarks = (context ?: return).getBookmarks()
+        val bookmark = bookmarks.getOrNull(currentBookmarkIndex - 1) ?: return
         coroutineScope {
             for (key in keys) {
                 val state = getKey<Int>(key)
-                if (state == readList[currentTabIndex].prefValue) {
+                if (state == bookmark.id) {
                     val id = key.replaceFirst(RESULT_BOOKMARK_STATE, RESULT_BOOKMARK)
 
                     val cached = getKey<ResultCached>(id) ?: continue
                     launch {
-                        getNewTotalChapters(cached, currentTabIndex)
+                        getNewTotalChapters(cached,currentBookmarkIndex)
                     }
                 }
             }
@@ -1454,6 +1449,7 @@ object BookDownloader2 {
     val refreshingChanged = Event<RefreshQuery>()
     val chapterReadChanged = Event<String>()
     val openChanged = Event<Int>()
+    val updatePagesDetails = Event<Boolean>()
 
     @Immutable
     data class RefreshQuery(

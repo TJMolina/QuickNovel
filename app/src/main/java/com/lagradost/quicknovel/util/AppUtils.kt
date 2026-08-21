@@ -63,6 +63,14 @@ object AppUtils {
             }
     }
 
+    fun String.toBookmarkKey(): String {
+        val sanitized = this.uppercase()
+            .replace(" ", "_")
+            .replace(Regex("[^A-Z0-9_]"), "")
+            .trim('_')
+        return if (sanitized.isEmpty()) "" else "CUSTOM_$sanitized"
+    }
+
     fun openInBrowser(url : String) {
         try {
             if (url.isBlank()) return

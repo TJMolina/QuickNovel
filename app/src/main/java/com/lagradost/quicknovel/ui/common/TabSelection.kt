@@ -38,7 +38,7 @@ import kotlinx.collections.immutable.persistentListOf
 @Composable
 fun HorizontalTab(
     pagerState: PagerState,
-    names: PersistentList<Int>,
+    names: PersistentList<Any>,
     containerColor: Color,
     edgePadding: Dp = 0.dp,
 ) {
@@ -82,7 +82,8 @@ fun HorizontalTab(
                         pagerState.requestScrollToPage(index)
                     }, text = {
                         Text(
-                            stringResource(row), color = if (selected) {
+                            text = (if(row is Int) stringResource(row) else row as String),
+                            color = if (selected) {
                                 colors.background
                             } else {
                                 colors.onBackground

@@ -12,12 +12,10 @@ import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.fixUrl
 import com.lagradost.quicknovel.fixUrlNull
 import com.lagradost.quicknovel.newChapterData
+import com.lagradost.quicknovel.newReview
 import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
-import com.lagradost.quicknovel.providers.NovelFireProvider.PostsResponse
-import com.lagradost.quicknovel.providers.NovelFireProvider.RelatedResponse
 import com.lagradost.quicknovel.setStatus
-import org.jsoup.Jsoup
 
 class LightNovelWorldProvider : MainAPI() {
     override val name = "LightNovelWorld"
@@ -26,7 +24,6 @@ class LightNovelWorldProvider : MainAPI() {
     override val iconId = R.drawable.icon_lightnovelworld
     override val iconBackgroundId = R.color.colorPrimaryWhite
     override val hasReviews = true
-    var novelId = ""
     override val mainCategories = listOf(
         "All" to "all",
         "Ongoing" to "ongoing",
@@ -148,7 +145,6 @@ class LightNovelWorldProvider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url).document
-        novelId = document.selectFirst("meta[name=novel-id]")?.attr("content") ?: ""
         val title = document.selectFirst("h1.novel-title, meta[property=og:title]")?.let {
             if (it.tagName() == "meta") it.attr("content") else it.text()
         }?.trim() ?: return null
@@ -167,6 +163,7 @@ class LightNovelWorldProvider : MainAPI() {
             }
             setStatus(document.selectFirst("span.status-badge")?.text()?.trim())
             related = getRelated()
+            reviewData = document.selectFirst("meta[name=novel-id]")?.attr("content")
         }
     }
     suspend fun getRelated(): List<SearchResponse> {
@@ -184,32 +181,23 @@ class LightNovelWorldProvider : MainAPI() {
         }
     }
 
-    override suspend fun loadReviews(
-        url: String,
-        page: Int,
-        showSpoilers: Boolean
-    ): List<UserReview> {
-        if (novelId.isEmpty()) return emptyList()
-        val realUrl = "$mainUrl/api/comments/?comment_type=novel&commentable_id=$novelId&sort=newest&page=$page&parent_only=true"
+    override suspend fun loadReviews(url: String, page: Int, data: String?): List<UserReview> {
+        val id = data ?: return emptyList()
+
+        val realUrl = "$mainUrl/api/comments/?comment_type=novel&commentable_id=${id}&sort=newest&page=$page&parent_only=true"
         val res = app.get(realUrl).parsedSafe<PostsResponse>()
         val dataList = res?.comments ?: return emptyList()
 
-        return dataList.map { item ->
-            val content = if (item.isSpoiler == true && !showSpoilers) {
-                "Spoiler content hidden"
-            } else {
-                item.content ?: ""
-            }
-
+        return dataList.mapNotNull { item ->
             // ¿2025-10-18T23:39:33..." -> "2025-10-18 23:39:33"
             val cleanDate = item.createdAt?.replace("T", " ")
 
-            UserReview(
-                review = content,
-                username = item.author?.username ?: "User",
-                reviewDate = cleanDate,
-                avatarUrl = fixUrlNull(item.author?.profileImageUrl),
-            )
+            newReview(item.content ?: return@mapNotNull null) {
+                username = item.author?.username
+                date = cleanDate
+                avatarUrl = item.author?.profileImageUrl
+                containsSpoilers = item.isSpoiler == true
+            }
         }
     }
 

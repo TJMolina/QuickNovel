@@ -26,6 +26,7 @@ import com.lagradost.quicknovel.EPUB_CURRENT_POSITION
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION_CHAPTER
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION_READ_AT
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION_SCROLL_CHAR
+import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HISTORY_FOLDER
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.PreferenceDelegate
@@ -41,14 +42,15 @@ import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.launchSafe
+import com.lagradost.quicknovel.ui.ReadType
+import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.CHAPTER_SORT
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.download.LAST_ACCES_SORT
+import com.lagradost.quicknovel.ui.download.LAST_UPDATED_SORT
 import com.lagradost.quicknovel.ui.download.REVERSE_CHAPTER_SORT
 import com.lagradost.quicknovel.ui.download.REVERSE_LAST_ACCES_SORT
 import com.lagradost.quicknovel.ui.download.SortingMethod
-import com.lagradost.quicknovel.ui.updates.data.UpdatesManager
-import com.lagradost.quicknovel.ui.updates.data.WatchEntry
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.ResultCached
@@ -191,9 +193,8 @@ class ResultViewModel : ViewModel() {
     var isGetLoaded = false
 
     var id: MutableLiveData<Int> = MutableLiveData<Int>(-1)
-    var libraryId: MutableLiveData<Int> = MutableLiveData<Int>(0)
-    //to bell status
-    var isWatching: MutableLiveData<Boolean> = MutableLiveData<Boolean>(false)
+    var readState: MutableLiveData<ReadType> = MutableLiveData<ReadType>(ReadType.NONE)
+
     var apiName : String = ""
 
     /*This is to detect whether it actually returned to
@@ -213,8 +214,6 @@ class ResultViewModel : ViewModel() {
     private var loadId: Int = 0
     private var loadUrl: String = ""
     private var hasLoaded: Boolean = false
-
-
 
     val loadResponse: MutableLiveData<Resource<LoadResponse>?> =
         MutableLiveData<Resource<LoadResponse>?>()
@@ -241,7 +240,7 @@ class ResultViewModel : ViewModel() {
                 if (loadPage == 1) {
                     reviews.postValue(Resource.Loading())
                 }
-                when (val data = api.loadReviews(url, loadPage, false)) {
+                when (val data = api.loadReviews(url, loadPage, load.reviewData)) {
                     is Resource.Success -> {
                         val moreReviews = data.value
                         currentReviews.addAll(moreReviews)
@@ -252,30 +251,6 @@ class ResultViewModel : ViewModel() {
 
                     else -> {}
                 }
-            }
-        }
-    }
-
-    fun changeWatchingStatus(){
-        isWatching.value?.let { newIsWatchingStatus ->
-            isWatching.postValue(!newIsWatchingStatus)
-            if(!newIsWatchingStatus){
-                //save novel data to watch
-                UpdatesManager.saveEntry(WatchEntry.fromCached(ResultCached(
-                    loadUrl,
-                    load.name,
-                    apiName,
-                    loadId,
-                    load.author,
-                    load.posterUrl,
-                    load.tags,
-                    load.rating,
-                    (load as? StreamResponse)?.data?.size ?: 1,
-                    System.currentTimeMillis(),
-                    synopsis = load.synopsis
-                )))
-            }else{
-                UpdatesManager.removeFromWatchList(loadId)
             }
         }
     }
@@ -515,7 +490,8 @@ class ResultViewModel : ViewModel() {
                     load.rating,
                     (load as? StreamResponse)?.data?.size ?: 1,
                     System.currentTimeMillis(),
-                    synopsis = load.synopsis
+                    synopsis = load.synopsis,
+                    posterHeaders = load.posterHeaders
                 )
             )
         }
@@ -576,21 +552,23 @@ class ResultViewModel : ViewModel() {
                 load.rating,
                 totalChapters,
                 System.currentTimeMillis(),
-                synopsis = load.synopsis
+                synopsis = load.synopsis,
+                posterHeaders = load.posterHeaders
             )
         )
     }
 
-    fun bookmark(bookMarkId: Int) = viewModelScope.launch {
+    fun bookmark(state: Int) = viewModelScope.launch {
         loadMutex.withLock {
             if (!hasLoaded) return@launch
             setKey(
-                RESULT_BOOKMARK_STATE, loadId.toString(), bookMarkId
+                RESULT_BOOKMARK_STATE, loadId.toString(), state
             )
             updateBookmarkData()
+            BookDownloader2.bookmarkChanged(loadId)
         }
 
-        libraryId.postValue(bookMarkId)
+        readState.postValue(ReadType.fromSpinner(state))
     }
 
     fun share() = viewModelScope.launch {
@@ -620,7 +598,6 @@ class ResultViewModel : ViewModel() {
     }
 
     override fun onCleared() {
-        super.onCleared()
         BookDownloader2.downloadProgressChanged -= ::progressChanged
         //BookDownloader2.downloadDataChanged -= ::progressDataChanged
         BookDownloader2.downloadRemoved -= ::downloadRemoved
@@ -727,18 +704,23 @@ class ResultViewModel : ViewModel() {
         }
     }
 
-    private fun setState(novelId: Int) {
-        loadId = novelId
+    private fun setState(tid: Int) {
+        loadId = tid
 
-        val currentLibraryId = getKey<Int>(RESULT_BOOKMARK_STATE, novelId.toString()) ?: 0
-        libraryId.postValue(currentLibraryId)
-        isWatching.postValue(UpdatesManager.getEntry(novelId) != null)
+        readState.postValue(
+            ReadType.fromSpinner(
+                getKey(
+                    RESULT_BOOKMARK_STATE, tid.toString()
+                )
+            )
+        )
+
         setKey(
-            DOWNLOAD_EPUB_LAST_ACCESS, novelId.toString(), System.currentTimeMillis()
+            DOWNLOAD_EPUB_LAST_ACCESS, tid.toString(), System.currentTimeMillis()
         )
         reCacheChapters()
         updateBookmarkData()
-
+        BookDownloader2.openChanged(tid)
         hasLoaded = true
 
         // insert a download progress if not found
@@ -768,6 +750,33 @@ class ResultViewModel : ViewModel() {
             load = data
             loadResponse.postValue(Resource.Success(data))
             setState(card.id)
+        }
+    }
+    fun initState(card: ImmutableSearchResponse) = viewModelScope.launch {
+        val id = card.id ?: throw ErrorLoadingException("Require Id")
+        isGetLoaded = false
+        loadResponse.postValue(Resource.Loading(card.url))
+
+        loadMutex.withLock {
+            this@ResultViewModel.apiName = card.apiName
+            repo = Apis.getApiFromName(card.apiName)
+            loadUrl = card.url
+
+            val data = StreamResponse(
+                url = card.url,
+                name = card.name,
+                data = listOf(),
+                author = card.author,
+                posterUrl = card.posterUrl,
+                posterHeaders = card.posterHeaders,
+                rating = card.rating,
+                synopsis = card.synopsis,
+                tags = card.tags,
+                apiName = card.apiName
+            )
+            load = data
+            loadResponse.postValue(Resource.Success(data))
+            setState(id)
         }
     }
 

@@ -2,10 +2,14 @@ package com.lagradost.quicknovel.util
 
 import android.app.ActivityManager
 import android.content.Context
+import android.content.Intent
+import androidx.core.net.toUri
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
+import com.lagradost.quicknovel.CommonActivity.activity
+import com.lagradost.quicknovel.mvvm.logError
 import java.io.Reader
 
 object AppUtils {
@@ -44,25 +48,29 @@ object AppUtils {
         } catch (t: Throwable) {
             false
         }
+
+    //Reminder: this is used to convert PDF text into HTML
     fun String.textToHtmlChapter(): String {
         return this
             .replace(Regex("((?<=\\p{Ll}(\\.{2,5})?),?) \\n(?=\\p{Ll})"), " ")
             .split(Regex("\\n"))
             .joinToString("") { paragraph ->
                 if (paragraph.trim().isNotBlank()) {
-                    paragraph.split(Regex("(?<=(?<!\\.)\\.)(?=\\s+)"))
-                        .joinToString("") { "<p>${it}</p>" } + "</br>"
+                    "<p>${paragraph.trim()}</p>"
                 } else {
-                    "</br>"
+                    "<br />"
                 }
             }
     }
 
-    fun String.toLibraryKey(): String {
-        val sanitized = this.uppercase()
-            .replace(" ", "_")
-            .replace(Regex("[^A-Z0-9_]"), "")
-            .trim('_')
-        return if (sanitized.isEmpty()) "" else "CUSTOM_$sanitized"
+    fun openInBrowser(url : String) {
+        try {
+            if (url.isBlank()) return
+            val i = Intent(Intent.ACTION_VIEW)
+            i.data = url.toUri()
+            activity?.startActivity(i)
+        } catch (t : Throwable) {
+            logError(t)
+        }
     }
 }

@@ -9,18 +9,16 @@ import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.SearchResponse
+import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.fixUrl
 import com.lagradost.quicknovel.fixUrlNull
 import com.lagradost.quicknovel.newChapterData
+import com.lagradost.quicknovel.newReview
 import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.setStatus
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
-import com.lagradost.quicknovel.MainActivity.Companion.app
-import com.lagradost.quicknovel.UserReview
-import com.lagradost.quicknovel.providers.LightNovelWorldProvider.PostsResponse
-import com.lagradost.quicknovel.util.CommonHeaders.ajaxHeaders
 
 class NovelLightProvider:  MainAPI() {
     override val name = "Novel Light"
@@ -30,8 +28,14 @@ class NovelLightProvider:  MainAPI() {
     override val iconBackgroundId = R.color.novelightColor
     override val hasMainPage = true
     override val hasReviews = true
-    var novelId = ""
-
+    fun baseHeaders(url:String = "") =
+        if(url.isNotEmpty())
+            mapOf(
+                "X-Requested-With" to "XMLHttpRequest",
+                "Referer" to url,
+                "Accept" to "application/json, text/javascript, */*; q=0.01"
+            )
+    else emptyMap()
     override suspend fun loadMainPage(
         page: Int,
         mainCategory: String?,
@@ -66,7 +70,7 @@ class NovelLightProvider:  MainAPI() {
             ?.substringAfter("const BOOK_ID = \"")
             ?.substringBefore("\"") ?: return emptyList()
         val url = "$mainUrl/book/ajax/chapter-pagination?csrfmiddlewaretoken=$csrfToken&book_id=$bookId&page=1&pagination=0"
-        val response = app.get(url, headers = ajaxHeaders(url)).parsed<ChapterResponse>()
+        val response = app.get(url, headers = baseHeaders(url)).parsed<ChapterResponse>()
         val document = Jsoup.parse(response.html)
        return document.select("a").mapNotNull { li ->
             if(li.selectFirst("span.cost") != null) return@mapNotNull null
@@ -85,8 +89,6 @@ class NovelLightProvider:  MainAPI() {
         val title = document.selectFirst("header h1")?.text() ?: throw ErrorLoadingException("Title not found")
 
         val scriptData = document.selectFirst("#comments script")?.data() ?: ""
-        novelId = Regex("""const OBJECT_BY_COMMENT = (\d+);""").find(scriptData)?.groupValues?.get(1) ?: ""
-
 
         val chapters = getChapters(document)
         return newStreamResponse(title,fixUrl(url), chapters) {
@@ -104,6 +106,7 @@ class NovelLightProvider:  MainAPI() {
             this.tags = infoDiv.selectFirst("div.block.mini-info > div > div.info")?.select("> a")?.mapNotNull {
                 it.text().trim().takeIf { text ->  !text.isEmpty() }
             }
+            reviewData = Regex("""const OBJECT_BY_COMMENT = (\d+);""").find(scriptData)?.groupValues?.get(1) ?: ""
             related = getRelated(document)
         }
     }
@@ -121,34 +124,28 @@ class NovelLightProvider:  MainAPI() {
         }
     }
 
-    override suspend fun loadReviews(
-        url: String,
-        page: Int,
-        showSpoilers: Boolean
-    ): List<UserReview> {
-        if (novelId.isEmpty()) return emptyList()
+    override suspend fun loadReviews(url: String, page: Int, data: String?): List<UserReview> {
+        val id = data ?: return emptyList()
 
         //https://novelight.net/api/comments/?content_type=18&limit=20&object_id=308&page=1
-        val realUrl = "$mainUrl/api/comments/?content_type=18&limit=20&object_id=$novelId&page=$page"
+        val realUrl = "$mainUrl/api/comments/?content_type=18&limit=20&object_id=$id&page=$page"
 
         val res = app.get(realUrl).parsedSafe<NovelLightReviewsResponse>()
         val dataList = res?.results ?: return emptyList()
 
-        return dataList.map { item ->
+        return dataList.mapNotNull { item ->
             val cleanDate = item.timeCreated?.replace("T", " ")
-
-            UserReview(
-                review = item.content ?: "",
-                username = item.userObject?.username ?: "User",
-                reviewDate = cleanDate,
-                avatarUrl = fixUrlNull(item.userObject?.avatar),
-            )
+            newReview(item.content ?: return@mapNotNull null) {
+                username = item.userObject?.username
+                date = cleanDate
+                avatarUrl = fixUrlNull(item.userObject?.avatar)
+            }
         }
     }
     override suspend fun loadHtml(url: String): String {
         val jsonResponse = app.get(
             url = ajaxUrl + "/${url.substringAfterLast("/book/chapter/")}",
-            headers = ajaxHeaders(url),
+            headers = baseHeaders(url),
         ).parsed<LoadHtmlResponse>()
         return jsonResponse.content
     }

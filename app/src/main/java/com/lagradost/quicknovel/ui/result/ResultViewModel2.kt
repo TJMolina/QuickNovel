@@ -185,13 +185,13 @@ class ResultViewModel2(
                 id = response.id ?: 0,
                 author = response.author,
                 poster = response.posterUrl,
-                tags = response.tags,
+                tags = response.tags?.toList(),
                 rating = response.rating,
                 totalChapters = response.chapters?.toInt() ?: 1,
                 lastTotalChapters = response.lastTotalChapters?.toInt(),
                 cachedTime = System.currentTimeMillis(),
                 synopsis = response.synopsis,
-                posterHeaders = response.posterHeaders,
+                posterHeaders = response.posterHeaders?.toMap(),
                 statusName = statusName
             )
         }
@@ -200,9 +200,8 @@ class ResultViewModel2(
             val id = response.id ?: return
             val finalBookmarkId =
                 bookmarkId ?: getKey<Int>(RESULT_BOOKMARK_STATE, id.toString()) ?: 0
-
             val cached = toResultCached(response)
-            setKey(HISTORY_FOLDER, id.toString(), toResultCached(response))
+            setKey(HISTORY_FOLDER, id.toString(), cached)
             if (finalBookmarkId > 0) {
                 setKey(RESULT_BOOKMARK, id.toString(), cached)
             }

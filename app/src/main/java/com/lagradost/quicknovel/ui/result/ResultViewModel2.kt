@@ -3,12 +3,13 @@ package com.lagradost.quicknovel.ui.result
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.lagradost.quicknovel.APIRepository
 import com.lagradost.quicknovel.BaseApplication
 import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKey
 import com.lagradost.quicknovel.BookDownloader2
-import com.lagradost.quicknovel.DownloadFileWorkManager
 import com.lagradost.quicknovel.BookDownloader2.openQuickStream
 import com.lagradost.quicknovel.BookDownloader2Helper
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE
@@ -20,6 +21,7 @@ import com.lagradost.quicknovel.CommonActivity.activity
 import com.lagradost.quicknovel.DataStore
 import com.lagradost.quicknovel.DefaultBookmark
 import com.lagradost.quicknovel.DownloadActionType
+import com.lagradost.quicknovel.DownloadFileWorkManager
 import com.lagradost.quicknovel.DownloadProgressState
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION_CHAPTER
@@ -50,6 +52,7 @@ import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.util.updates.data.UpdatesManager
 import com.lagradost.quicknovel.updateBookmark
 import com.lagradost.quicknovel.util.Apis
+import com.lagradost.quicknovel.util.Apis.Companion.getApiFromName
 import com.lagradost.quicknovel.util.ResultCached
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
@@ -145,9 +148,15 @@ sealed class ResultPageEffect {
 class ResultViewModel2(
     var api: APIRepository? = null,
     var url: String? = null,
-    var id: Int? = null
+    var id: Int? = null,
+    initializer: ImmutableSearchResponse? = null,
 ) : ViewModel(), ActionHandler<ResultPageAction>,
-    StateContainer<ResultState> by DefaultStateContainer(ResultState()),
+    StateContainer<ResultState> by DefaultStateContainer(
+        ResultState(
+            response = initializer,
+            currentBookmark = initializer?.id?.let { getKey<Int>(RESULT_BOOKMARK_STATE, it.toString()) } ?: 0
+        )
+    ),
     EffectContainer<ResultPageEffect> by DefaultEffectContainer() {
 
     //avoid opening multiple previews at the same time
@@ -155,6 +164,15 @@ class ResultViewModel2(
 
 
     companion object {
+        fun provideFactory(response: ImmutableSearchResponse) = viewModelFactory {
+            initializer {
+                ResultViewModel2(
+                    api = getApiFromName(response.apiName),
+                    url = response.url,
+                    initializer = response
+                )
+            }
+        }
         fun toResultCached(response: ImmutableSearchResponse): ResultCached {
             val statusName = response.loadData?.status?.name ?: response.statusRes?.let { resId ->
                 com.lagradost.quicknovel.ReleaseStatus.entries.find { it.resource == resId }?.name
@@ -618,7 +636,6 @@ class ResultViewModel2(
     private fun chapterAction(action: ResultPageAction.ChapterAction) {
         when (action.operation) {
             ChapterOperation.Stream -> {
-                addToHistory(response = action.response)
                 val chapters = action.response.loadData?.chapters ?: persistentListOf()
                 if (chapters.isEmpty()) {
                     viewModelScope.launch {
@@ -630,6 +647,7 @@ class ResultViewModel2(
                 }
 
                 try {
+                    // TODO refactor this to use bookdownloader when we deprecate reviewviewmodel1
                     val uri =
                         activity?.createQuickStream(
                             QuickStreamData(
@@ -650,6 +668,7 @@ class ResultViewModel2(
                             )
                         )
 
+                    ImmutableSearchResponse.addToHistory(response = action.response)
                     setKey(EPUB_CURRENT_POSITION, action.response.name, action.chapter.index)
                     setKey(
                         EPUB_CURRENT_POSITION_CHAPTER,
@@ -685,7 +704,6 @@ class ResultViewModel2(
             }
 
             SearchResponseOperation.Read -> {
-                addToHistory(action.response)
                 readEpub(action.response)
             }
 
@@ -738,8 +756,6 @@ class ResultViewModel2(
 
     private fun readEpub(response: ImmutableSearchResponse) = viewModelScope.launch {
         withContext(Dispatchers.Default) {
-
-            val id = response.id!!
             val downloadState = response.downloadState!!
             try {
                 if (response.isImported && downloadState.progress < downloadState.total) {
@@ -748,23 +764,12 @@ class ResultViewModel2(
                     }
                     BookDownloader2.preloadPartialImportedPdf(response)
                 }
-                BookDownloader2.readEpub(
-                    id,
-                    downloadState.progress.toInt(),
-                    response.author,
-                    response.name,
-                    response.apiName,
-                    response.synopsis
-                ) {
+                BookDownloader2.readEpub(response) {
                     updateState {
                         copy(response = this@updateState.response?.copy(generating = true))
                     }
                 }
             } finally {
-                val newTimeOfPageOpened = System.currentTimeMillis()
-                ImmutableSearchResponse.setTimeOfPageOpened(id, newTimeOfPageOpened)
-                BookDownloader2.chapterReadChanged(response.name)
-
                 updateState {
                     copy(response = this@updateState.response?.copy(generating = false))
                 }

@@ -80,12 +80,10 @@ import com.lagradost.quicknovel.compose.BaseStyles.whiteButtonColors
 import com.lagradost.quicknovel.compose.CloudStreamTheme
 import com.lagradost.quicknovel.compose.CloudStreamTheme.colors
 import com.lagradost.quicknovel.compose.RoundedImageShape
-import com.lagradost.quicknovel.compose.SingleSelectDialog
 import com.lagradost.quicknovel.compose.circle
 import com.lagradost.quicknovel.compose.ripple
 import com.lagradost.quicknovel.compose.rounded
 import com.lagradost.quicknovel.mvvm.safe
-import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.common.DownloadStateAction
 import com.lagradost.quicknovel.ui.common.HorizontalTab
 import com.lagradost.quicknovel.ui.common.ImmutableChapterData

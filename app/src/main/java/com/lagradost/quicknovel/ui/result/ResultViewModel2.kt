@@ -1,11 +1,11 @@
 package com.lagradost.quicknovel.ui.result
 
-import android.content.Context
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lagradost.quicknovel.APIRepository
 import com.lagradost.quicknovel.BaseApplication
+import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKey
 import com.lagradost.quicknovel.BookDownloader2
 import com.lagradost.quicknovel.DownloadFileWorkManager
@@ -39,10 +39,7 @@ import com.lagradost.quicknovel.compose.StateContainer
 import com.lagradost.quicknovel.deleteBookmark
 import com.lagradost.quicknovel.getBookmarks
 import com.lagradost.quicknovel.mergeBookmarks
-import com.lagradost.quicknovel.ui.ReadType
-import com.lagradost.quicknovel.deleteBookmark
-import com.lagradost.quicknovel.getBookmarks
-import com.lagradost.quicknovel.mergeBookmarks
+import com.lagradost.quicknovel.saveBookmarks
 import com.lagradost.quicknovel.ui.common.ImmutableChapterData
 import com.lagradost.quicknovel.ui.common.ImmutableDownloadState
 import com.lagradost.quicknovel.ui.common.ImmutableReview
@@ -50,9 +47,7 @@ import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.common.SearchResponseAction
 import com.lagradost.quicknovel.ui.common.SearchResponseOperation
 import com.lagradost.quicknovel.ui.download.DownloadFragment
-import com.lagradost.quicknovel.updateBookmark
-import com.lagradost.quicknovel.util.Apis
-import com.lagradost.quicknovel.util.Apis.Companion.getApiFromName
+import com.lagradost.quicknovel.util.updates.data.UpdatesManager
 import com.lagradost.quicknovel.updateBookmark
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.ResultCached
@@ -76,7 +71,8 @@ data class ResultState(
     val bookmarks: PersistentList<DefaultBookmark> = emptyList<DefaultBookmark>().toPersistentList(),
     val dialogState: ResultDialogState? = null,
     val deleteTarget: ImmutableSearchResponse? = null,
-    val showMoreInfo: Boolean = true
+    val showMoreInfo: Boolean = true,
+    val isWatching: Boolean = false
 )
 
 @Immutable
@@ -119,7 +115,7 @@ sealed class ResultPageAction {
         val apiName: String? = null,
     ) : ResultPageAction()
 
-    data class ShowBookmarkDialog(val context: Context) : ResultPageAction()
+    object ShowBookmarkDialog : ResultPageAction()
     object ShowDeleteConfirmation : ResultPageAction()
     data class AskDeleteNovel(val response: ImmutableSearchResponse) : ResultPageAction()
     object DismissDeleteConfirmation : ResultPageAction()
@@ -128,6 +124,7 @@ sealed class ResultPageAction {
 
     data class ModifyBookmark(val action: BookmarkAction): ResultPageAction()
     data class DeleteNovel(val id: Int) : ResultPageAction()
+    object ToggleWatch : ResultPageAction()
 
 
     object ExpandReviews : ResultPageAction()
@@ -159,6 +156,10 @@ class ResultViewModel2(
 
     companion object {
         fun toResultCached(response: ImmutableSearchResponse): ResultCached {
+            val statusName = response.loadData?.status?.name ?: response.statusRes?.let { resId ->
+                com.lagradost.quicknovel.ReleaseStatus.entries.find { it.resource == resId }?.name
+            }
+
             return ResultCached(
                 source = response.url,
                 name = response.name,
@@ -169,32 +170,24 @@ class ResultViewModel2(
                 tags = response.tags,
                 rating = response.rating,
                 totalChapters = response.chapters?.toInt() ?: 1,
+                lastTotalChapters = response.lastTotalChapters?.toInt(),
                 cachedTime = System.currentTimeMillis(),
                 synopsis = response.synopsis,
                 posterHeaders = response.posterHeaders,
-                status = response.statusRes
+                statusName = statusName
             )
         }
 
-        fun updateCache(response: ImmutableSearchResponse, bookmarkId: Int? = null) {
+        fun addToHistory(response: ImmutableSearchResponse, bookmarkId: Int? = null) {
             val id = response.id ?: return
-            val context = BaseApplication.context ?: return
+            val finalBookmarkId =
+                bookmarkId ?: getKey<Int>(RESULT_BOOKMARK_STATE, id.toString()) ?: 0
 
-            with(DataStore) {
-                val finalBookmarkId =
-                    bookmarkId ?: context.getKey<Int>(RESULT_BOOKMARK_STATE, id.toString()) ?: 0
-
-                val cached = toResultCached(response)
-                // Only save to cache if it has a bookmark
-                if (finalBookmarkId > 0) {
-                    context.setKey(RESULT_BOOKMARK, id.toString(), cached)
-                }
-            }
-        }
-
-        fun addToHistory(response: ImmutableSearchResponse) {
-            val id = response.id ?: return
+            val cached = toResultCached(response)
             setKey(HISTORY_FOLDER, id.toString(), toResultCached(response))
+            if (finalBookmarkId > 0) {
+                setKey(RESULT_BOOKMARK, id.toString(), cached)
+            }
         }
     }
 
@@ -248,16 +241,7 @@ class ResultViewModel2(
                 api = if (!apiName.isNullOrBlank()) Apis.getApiFromNameOrNull(apiName) else null
                 id = action.id
                 url = action.url
-
-                updateState {
-                    copy(
-                        response = action.response,
-                        loadingResponse = true,
-                        reviews = ResultReviewState(),
-                        responseError = null
-                    )
-                }
-
+                updateState { copy(loadingResponse = true, dialogState = null) }
                 loadJob = loadResult(action.response, action.isPreview)
             }
             ResultPageAction.ShowDeleteConfirmation -> updateState {
@@ -288,8 +272,20 @@ class ResultViewModel2(
                 }
 
             }
-            is ResultPageAction.ShowBookmarkDialog -> showBookmarkDialog(action.context)
+            is ResultPageAction.ShowBookmarkDialog -> showBookmarkDialog()
+            ResultPageAction.ToggleWatch -> toggleWatch()
         }
+    }
+
+    private fun toggleWatch() {
+        val response = state.value.response ?: return
+        val current = state.value.isWatching
+        if (current) {
+            UpdatesManager.removeFromWatchList(response.id ?: return)
+        } else {
+            UpdatesManager.addToWatchList(toResultCached(response))
+        }
+        updateState { copy(isWatching = !current) }
     }
 
     private fun loadResult(
@@ -306,25 +302,23 @@ class ResultViewModel2(
             result?.name ?: ""
         )
 
-        // Handle dialog state
         if (!isPreview) {
             ImmutableSearchResponse.setTimeOfPageOpened(bookId, System.currentTimeMillis())
             BookDownloader2.openChanged(bookId)
-            updateState { copy(dialogState = null) }
         }
-        val bookmarks = context.getBookmarks()
-        val bookmarkId = with(DataStore) {
-            context.getKey<Int>(RESULT_BOOKMARK_STATE, bookId.toString())
-        } ?: 0
 
         updateState {
             copy(
+                response = result,
                 dialogState = if (isPreview) (dialogState?.copy(isPreviewOpen = true)
                     ?: ResultDialogState(isPreviewOpen = true)) else dialogState,
                 loadingResponse = !isImported,
-                currentBookmark = bookmarkId,
-                bookmarks = bookmarks,
-                showMoreInfo = !isImported
+                currentBookmark = getKey<Int>(RESULT_BOOKMARK_STATE, bookId.toString()) ?: 0,
+                bookmarks = context.getBookmarks(),
+                showMoreInfo = !isImported,
+                reviews = ResultReviewState(),
+                responseError = null,
+                isWatching = UpdatesManager.isWatched(bookId)
             )
         }
 
@@ -346,26 +340,27 @@ class ResultViewModel2(
                 )
             } ?: 0
 
-            val mergedResponse = if (fullResponse.posterUrl.isNullOrBlank() && result?.posterUrl?.isBlank() == true) {
+            val mergedResponse = if (fullResponse.posterUrl.isNullOrBlank()) {
                 fullResponse.copy(
-                    posterUrl = result.posterUrl,
-                    posterHeaders = result.posterHeaders
+                    posterUrl = result?.posterUrl,
+                    posterHeaders = result?.posterHeaders
                 )
-            } else {
-                fullResponse
-            }
+            } else fullResponse
+            
+            val finalResponse = mergedResponse.copy(
+                lastTotalChapters = if (!isPreview) fullResponse.chapters else result?.lastTotalChapters
+            )
 
             updateState {
                 copy(
-                    response = mergedResponse,
+                    response = finalResponse,
                     loadingResponse = false,
                     currentBookmark = freshBookmarkId,
                     showMoreInfo = true,
                     responseError = null
                 )
             }
-            updateCache(mergedResponse, freshBookmarkId)
-            addToHistory(mergedResponse)
+            addToHistory(finalResponse, freshBookmarkId)
         }.onFailure { error ->
             updateState {
                 copy(
@@ -460,9 +455,8 @@ class ResultViewModel2(
     private fun reorderLibraries(newList: PersistentList<DefaultBookmark>) {
         val context = BaseApplication.context ?: return
         try {
-            newList.forEachIndexed { index, lib ->
-                context.updateBookmark(lib.copy(position = index + 1))
-            }
+            val updatedList = newList.mapIndexed { index, lib -> lib.copy(position = index + 1) }
+            context.saveBookmarks(updatedList)
             refreshLibraries()
         } catch (e: Exception) {
             CommonActivity.showToast(e.message)
@@ -557,8 +551,8 @@ class ResultViewModel2(
         }
     }
 
-    private fun showBookmarkDialog(context: Context?) {
-        if (context == null) return
+    private fun showBookmarkDialog() {
+        val context = BaseApplication.context ?: return
         updateState {
             copy(
                 dialogState = dialogState?.copy(isBookmarkSelectionOpen = true) ?: ResultDialogState(isBookmarkSelectionOpen = true),

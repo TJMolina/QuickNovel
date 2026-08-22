@@ -66,6 +66,7 @@ import com.lagradost.quicknovel.tachiyomi.Preference
 import com.lagradost.quicknovel.tachiyomi.SearchableSettings
 import com.lagradost.quicknovel.tachiyomi.TextPreferenceWidget
 import com.lagradost.quicknovel.ui.txt
+import com.lagradost.quicknovel.util.updates.services.NovelAutoUpdateScheduler
 import com.lagradost.quicknovel.util.Apis.Companion.apis
 import com.lagradost.quicknovel.util.AppUtils.openInBrowser
 import com.lagradost.quicknovel.util.BackupUtils
@@ -279,20 +280,37 @@ class SettingScreen : SearchableSettings {
                 )
             ),
             Preference.PreferenceGroup(
-                title = stringResource(R.string.app_settings),
+                title = stringResource(R.string.novel_auto_update_category),
                 preferenceItems = persistentListOf(
-                    Preference.PreferenceItem.TextPreference(
-                        icon = painterResource(R.drawable.ic_baseline_system_update_24),
-                        title = stringResource(R.string.check_for_update),
-                        onClick = {
-                            // Todo refactor
-                            scope.launch {
-                                withContext(Dispatchers.IO) {
-                                    if (true != activity?.runAutoUpdate(false)) {
-                                        showToast(R.string.no_update_found, Toast.LENGTH_SHORT)
-                                    }
-                                }
-                            }
+                    Preference.PreferenceItem.SwitchPreference(
+                        icon = painterResource(R.drawable.ic_baseline_notifications_active_24),
+                        title = stringResource(R.string.novel_auto_update_enabled_title),
+                        subtitle = stringResource(R.string.novel_auto_update_enabled_desc),
+                        pref = store.getBoolean(
+                            stringResource(R.string.novel_auto_update_enabled_key),
+                            false,
+                        ),
+                        onValueChanged = {
+                            NovelAutoUpdateScheduler.apply(context, enabled = it)
+                            true
+                        }
+                    ),
+                    Preference.PreferenceItem.ListPreference(
+                        icon = painterResource(R.drawable.ic_baseline_history_24),
+                        title = stringResource(R.string.novel_auto_update_interval_title),
+                        subtitle = stringResource(R.string.novel_auto_update_interval_desc),
+                        pref = store.getLong(
+                            stringResource(R.string.novel_auto_update_interval_key),
+                            24L,
+                        ),
+                        entries = persistentMapOf(
+                            8L to stringResource(R.string.novel_auto_update_interval_8h),
+                            12L to stringResource(R.string.novel_auto_update_interval_12h),
+                            24L to stringResource(R.string.novel_auto_update_interval_24h),
+                        ),
+                        onValueChanged = {
+                            NovelAutoUpdateScheduler.apply(context, interval = it)
+                            true
                         }
                     ),
                     Preference.PreferenceItem.SwitchPreference(
@@ -304,6 +322,24 @@ class SettingScreen : SearchableSettings {
                             true,
                         ),
                     ),
+                    Preference.PreferenceItem.TextPreference(
+                        icon = painterResource(R.drawable.ic_baseline_system_update_24),
+                        title = stringResource(R.string.check_for_update),
+                        onClick = {
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    if (true != activity?.runAutoUpdate(false)) {
+                                        showToast(R.string.no_update_found, Toast.LENGTH_SHORT)
+                                    }
+                                }
+                            }
+                        }
+                    ),
+                )
+            ),
+            Preference.PreferenceGroup(
+                title = stringResource(R.string.app_settings),
+                preferenceItems = persistentListOf(
                     Preference.PreferenceItem.TextPreference(
                         icon = painterResource(R.drawable.baseline_save_as_24),
                         title = stringResource(R.string.backup_settings),

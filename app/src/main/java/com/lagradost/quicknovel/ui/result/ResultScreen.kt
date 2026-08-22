@@ -320,6 +320,12 @@ fun ResultScreenImpl(
                                 activity?.startActivity(Intent.createChooser(i, response.name))
                             }
                         }
+                        TextIcon(
+                            stringResource(if (state.isWatching) R.string.updates_watching else R.string.updates_watch),
+                            icon = if (state.isWatching) R.drawable.ic_baseline_notifications_active_24 else R.drawable.ic_baseline_notifications_outline_24,
+                        ) {
+                            action(ResultPageAction.ToggleWatch)
+                        }
                     }
                 }
             }

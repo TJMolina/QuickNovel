@@ -124,7 +124,12 @@ fun BookmarkSelectionDialog(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            if (isEditing) {
+                onAction(ResultPageAction.ModifyBookmark(BookmarkAction.ReorderBookmarks(localLibraries.toPersistentList())))
+            }
+            onDismiss()
+        },
         containerColor = colors.background,
         dragHandle = null,
         shape = RoundedCornerShape(7.dp)

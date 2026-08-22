@@ -36,6 +36,13 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+        profile {
+            initWith release
+            applicationIdSuffix ".profile"
+            versionNameSuffix "-PROFILE"
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
+        }
         debug {
             buildConfigField("boolean", "BETA", "true")
             applicationIdSuffix ".debug"

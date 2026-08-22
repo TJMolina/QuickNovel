@@ -246,11 +246,11 @@ data class DefaultBookmark(
 )
 
 val DEFAULT_BOOKMARKS: PersistentList<DefaultBookmark> = persistentListOf(
-    DefaultBookmark(1, "READING",       R.string.type_reading.toString(),      editable = false, position = 1),
-    DefaultBookmark(2, "PLAN_TO_READ",  R.string.type_plan_to_read.toString(), editable = false, position = 2),
-    DefaultBookmark(3, "ON_HOLD",       R.string.type_on_hold.toString(),      editable = false, position = 3),
-    DefaultBookmark(4, "COMPLETED",     R.string.type_completed.toString(),    editable = false, position = 4),
-    DefaultBookmark(5, "DROPPED",       R.string.type_dropped.toString(),      editable = false, position = 5),
+    DefaultBookmark(1, "READING",       "type_reading",      editable = false, position = 1),
+    DefaultBookmark(2, "PLAN_TO_READ",  "type_plan_to_read", editable = false, position = 2),
+    DefaultBookmark(3, "ON_HOLD",       "type_on_hold",      editable = false, position = 3),
+    DefaultBookmark(4, "COMPLETED",     "type_completed",    editable = false, position = 4),
+    DefaultBookmark(5, "DROPPED",       "type_dropped",      editable = false, position = 5),
 )
 /**
  * Returns the list of persisted libraries, sorted by [DefaultBookmark.position].
@@ -274,7 +274,14 @@ fun Context.getBookmarks(): PersistentList<DefaultBookmark> {
 }
 
 private fun Context.translateBookmark(bookmark: DefaultBookmark): DefaultBookmark {
-    val resId = bookmark.title.toIntOrNull() ?: return bookmark
+    val resId = when (bookmark.title) {
+        "type_reading" -> R.string.type_reading
+        "type_plan_to_read" -> R.string.type_plan_to_read
+        "type_on_hold" -> R.string.type_on_hold
+        "type_completed" -> R.string.type_completed
+        "type_dropped" -> R.string.type_dropped
+        else -> bookmark.title.toIntOrNull()
+    } ?: return bookmark
     return try {
         bookmark.copy(title = getString(resId))
     } catch (e: Exception) {

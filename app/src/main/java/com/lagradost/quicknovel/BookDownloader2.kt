@@ -43,6 +43,7 @@ import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BaseApplication.Companion.getKeys
 import com.lagradost.quicknovel.BaseApplication.Companion.removeKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKey
+import com.lagradost.quicknovel.BookDownloader2.LOCAL_EPUB
 import com.lagradost.quicknovel.BookDownloader2.LOCAL_EPUB_MIN_SIZE
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE_PDF
@@ -61,8 +62,6 @@ import com.lagradost.quicknovel.mvvm.launchSafe
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.ui.common.ImmutableSearchResponse
 import com.lagradost.quicknovel.ui.download.DownloadFragment
-import com.lagradost.quicknovel.ui.settings.SettingsFragment.Companion.getBasePath
-import com.lagradost.quicknovel.ui.settings.SettingsFragment.Companion.getDefaultDir
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromName
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromNameOrNull
 import com.lagradost.quicknovel.util.AppUtils.textToHtmlChapter
@@ -72,7 +71,6 @@ import com.lagradost.quicknovel.util.Event
 import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.pmap
-import com.lagradost.safefile.SafeFile
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPage
@@ -855,10 +853,11 @@ object BookDownloader2Helper {
                 epubWriter.write(book, fileStream)
                 setKey(DOWNLOAD_EPUB_SIZE, id.toString(), largestChapter)
             }
-            fileStream.close()
         } catch (e: Exception) {
             logError(e)
             throw e
+        } finally {
+            fileStream.close()
         }
     }
 }
@@ -866,9 +865,7 @@ object BookDownloader2Helper {
 object NotificationHelper {
     const val CHANNEL_ID = "epubdownloader.general"
     const val CHANNEL_NAME = "Downloads"
-    const val UPDATES_CHANNEL_ID = "novel_updates_channel"
-    const val UPDATES_NAME = "Updates"
-    const val UPDATES_DESCRIPT = "The updates notification chanel"
+    const val CHANNEL_DESCRIPT = "The download notification channel"
     private var hasCreatedNotChanel = false
 
     fun ComponentActivity.requestNotifications() {
@@ -890,26 +887,22 @@ object NotificationHelper {
         }
     }
 
-    fun Context.createNotificationChannels() {
-        if(hasCreatedNotChanel) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
-            val channels = listOf(
-                NotificationChannel(
-                    CHANNEL_ID,
-                    CHANNEL_NAME,
-                    NotificationManager.IMPORTANCE_LOW
-                ),
-                NotificationChannel(
-                    UPDATES_CHANNEL_ID,
-                    UPDATES_NAME,
-                    NotificationManager.IMPORTANCE_DEFAULT
-                ).apply { description = UPDATES_DESCRIPT }
-            )
+    fun Context.createNotificationChannel() {
+        hasCreatedNotChanel = true
+        // Create the NotificationChannel, but only on API 26+ because
+        // the NotificationChannel class is new and not in the support library
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = CHANNEL_NAME //getString(R.string.channel_name)
+            val descriptionText = CHANNEL_DESCRIPT//getString(R.string.channel_description)
+            val importance = NotificationManager.IMPORTANCE_DEFAULT
+            val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
+                description = descriptionText
+            }
+            // Register the channel with the system
             val notificationManager: NotificationManager =
                 this.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannels(channels)
+            notificationManager.createNotificationChannel(channel)
         }
-        hasCreatedNotChanel = true
     }
 
     // The id is fixed so the foreground notification is replaced, not stacked, per worker
@@ -917,7 +910,7 @@ object NotificationHelper {
 
     fun buildForegroundNotification(context: Context): android.app.Notification {
         if (!hasCreatedNotChanel) {
-            context.createNotificationChannels()
+            context.createNotificationChannel()
         }
 
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -946,11 +939,13 @@ object NotificationHelper {
         val hours: Int = eta / 3600
         val minutes: Int = (eta % 3600) / 60
         val seconds: Int = eta % 60
-        return when {
-            hours > 0 -> String.format("%02d h %02d min %02d s", hours, minutes, seconds)
-            minutes > 0 -> String.format("%02d min %02d s", minutes, seconds)
-            else -> String.format("%02d s", seconds)
+        var timeformat = String.format("%02d h %02d min %02d s", hours, minutes, seconds)
+        if (minutes <= 0 && hours <= 0) {
+            timeformat = String.format("%02d s", seconds)
+        } else if (hours <= 0) {
+            timeformat = String.format("%02d min %02d s", minutes, seconds)
         }
+        return timeformat
     }
 
     suspend fun getLargeIcon(context: Context, url: String?): Bitmap? {
@@ -972,18 +967,17 @@ object NotificationHelper {
         isStreamNovel: Boolean = true,
     ) {
         if (context == null) return
-        context.createNotificationChannels()
-
         val state = stateProgressState.state
-        val timeFormat = if (state == DownloadState.IsDownloading) etaToString(stateProgressState.etaMs) else ""
-
+        val timeFormat = if (state == DownloadState.IsDownloading) etaToString(
+            stateProgressState.etaMs
+        ) else ""
 
         val intent = Intent(context, MainActivity::class.java).apply {
             data = source?.toUri()
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
 
-        val pendingIntent = PendingIntent.getActivity(
+        val pendingIntent: PendingIntent = PendingIntent.getActivity(
             context, 0, intent,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
         )
@@ -996,12 +990,7 @@ object NotificationHelper {
             .setColor(context.colorFromAttribute(R.attr.colorPrimary))
             .setContentTitle(name)
             .setContentIntent(pendingIntent)
-            .setSmallIcon(when (state) {
-                DownloadState.IsDone -> R.drawable.rddone
-                DownloadState.IsDownloading -> R.drawable.rdload
-                DownloadState.IsPaused -> R.drawable.rdpause
-                else -> R.drawable.rderror
-            })
+
 
         val extraText = if (stateProgressState.total > 1) {
             val unit = if (progressInBytes) "Kb" else ""
@@ -1023,6 +1012,15 @@ object NotificationHelper {
         }
         builder.setContentText(statusText)
 
+        builder.setSmallIcon(
+            when (state) {
+                DownloadState.IsDone -> R.drawable.rddone
+                DownloadState.IsDownloading -> R.drawable.rdload
+                DownloadState.IsPaused -> R.drawable.rdpause
+                else -> R.drawable.rderror
+            }
+        )
+
 
         if (state == DownloadState.IsDownloading || state == DownloadState.IsPaused) {
             builder.setProgress(
@@ -1033,7 +1031,10 @@ object NotificationHelper {
             if (timeFormat.isNotEmpty()) builder.setSubText("$timeFormat remaining")
         }
 
-        getLargeIcon(context, posterUrl)?.let { builder.setLargeIcon(it) }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && posterUrl != null) {
+            context.getImageBitmapFromUrl(posterUrl)?.let { builder.setLargeIcon(it) }
+        }
 
 
         if (isActionable && (state == DownloadState.IsDownloading || state == DownloadState.IsPaused)) {
@@ -1064,6 +1065,10 @@ object NotificationHelper {
                     )
                 )
             }
+        }
+
+        if (!hasCreatedNotChanel) {
+            context.createNotificationChannel()
         }
 
         with(NotificationManagerCompat.from(context)) {
@@ -1403,8 +1408,8 @@ object BookDownloader2 {
     /**
      * This search for new chapters of a specific novel in library
      */
-    suspend fun getNewTotalChapters(cached: ResultCached, page: Int): ResultCached? =
-        getNewTotalChaptersSemaphore.withPermit {
+    suspend fun getNewTotalChapters(cached: ResultCached, page: Int): ResultCached? {
+        val response = getNewTotalChaptersSemaphore.withPermit {
             try {
                 refreshingChanged(RefreshQuery(cached.id, true, page))
 
@@ -1443,19 +1448,16 @@ object BookDownloader2 {
                         )
                     }
                 }
-
-                refreshingChanged(RefreshQuery(cached.id, false, page))
-
                 newCached
             } catch (e: Throwable) {
-                refreshingChanged(RefreshQuery(cached.id, false, page))
                 if (e !is CancellationException)
                     logError(e)
                 null
             }
         }
+        refreshingChanged(RefreshQuery(response?.id ?: cached.id, false, page))
+        return response
     }
-
 
     val downloadInfoMutex = Mutex()
     val downloadProgress: ConcurrentHashMap<Int, DownloadProgressState> = ConcurrentHashMap()
@@ -1536,7 +1538,8 @@ object BookDownloader2 {
     ) {
         NotificationHelper.createNotification(
             context,
-            load.url, id,
+            load.url,
+            id,
             load.name,
             load.posterUrl,
             stateProgressState,

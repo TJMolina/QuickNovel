@@ -18,10 +18,11 @@ data class ResultCached(
     val tags : List<String>?,
     val rating : Int?,
     val totalChapters : Int,
+    val lastTotalChapters : Int? = null,
     val cachedTime : Long, // milliseconds
     val synopsis : String? = null,
     val posterHeaders : Map<String,String>? = null,
-    val status : Int? = null,
+    val statusName : String? = null,
 ) {
     val image : UiImage? get() = img(poster)
 

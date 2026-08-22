@@ -299,19 +299,12 @@ fun SearchResponseRow(
                 .weight(0.01f)
         )
 
-        if (response.downloadState != null && response.epubSize != null && response.hasNewChapters) {
-            Box(
-                modifier = Modifier
-                    .padding(horizontal = 5.dp)
-                    .circle()
-                    .background(colors.primary)
-                    .padding(vertical = 3.dp, horizontal = 13.dp)
-            ) {
-                Text(
-                    text = "+${(response.downloadState.progress - response.epubSize)}",
-                    color = colors.background
-                )
-            }
+        if (response.hasNewChapters) {
+            NewChaptersChip(
+                number = response.newChaptersCount.toInt(),
+                isGrid = false,
+                modifier = Modifier.padding(horizontal = 5.dp)
+            )
         }
 
         if (response.downloadState != null) {
@@ -355,6 +348,30 @@ fun SearchResponseRow(
         }
 
         Spacer(Modifier.width(10.dp))
+    }
+}
+
+@Composable
+fun NewChaptersChip(
+    number: Int,
+    isGrid: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .run { if (isGrid) rounded() else circle() }
+            .background(colors.primary)
+            .run {
+                if (isGrid) padding(4.dp)
+                else padding(vertical = 3.dp, horizontal = 13.dp)
+            }
+    ) {
+        Text(
+            text = "+$number",
+            color = colors.background,
+            fontSize = if (isGrid) 12.sp else 14.sp,
+            lineHeight = if (isGrid) 12.sp else 15.sp,
+        )
     }
 }
 
@@ -512,19 +529,11 @@ fun SearchResponseItem(
                                 fontSize = 12.sp, lineHeight = 12.sp
                             )
                         }
-                    } else if (response.epubSize != null && response.hasNewChapters) {
-                        Box(
-                            modifier = Modifier
-                                .rounded()
-                                .background(colors.primary)
-                                .padding(4.dp)
-                        ) {
-                            Text(
-                                text = "+${(response.downloadState.progress - response.epubSize)}",
-                                color = colors.background,
-                                fontSize = 12.sp, lineHeight = 12.sp
-                            )
-                        }
+                    } else if (response.hasNewChapters) {
+                        NewChaptersChip(
+                            number = response.newChaptersCount.toInt(),
+                            isGrid = true
+                        )
                     }
                 }
             }

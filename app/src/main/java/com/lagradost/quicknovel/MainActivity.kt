@@ -46,6 +46,7 @@ import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.CommonActivity.updateLocale
 import com.lagradost.quicknovel.DataStore.getKey
 import com.lagradost.quicknovel.DataStore.getKeys
+import com.lagradost.quicknovel.DataStore.toKotlinObject
 import com.lagradost.quicknovel.NotificationHelper.requestNotifications
 import com.lagradost.quicknovel.compose.ActionDialog
 import com.lagradost.quicknovel.compose.CloudStreamTheme
@@ -104,7 +105,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         fun loadPreviewPage(searchResponse: ImmutableSearchResponse) {
-            mainActivity?.mainViewModel?.onAction(ResultPageAction.LoadResult(response = searchResponse,))
+            mainActivity?.mainViewModel?.onAction(ResultPageAction.LoadResult(response = searchResponse))
         }
 
         fun loadPreviewPage(card: DownloadFragment.DownloadDataLoaded) {
@@ -125,6 +126,9 @@ class MainActivity : AppCompatActivity() {
 
             */
         }
+
+        const val EXTRA_URL = "extra_url"
+        const val EXTRA_API_NAME = "extra_api_name"
 
         var app = Requests(
             OkHttpClient()
@@ -440,6 +444,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
+
+        //this is from New Chapters notification
+        val urlExtra = intent.getStringExtra(EXTRA_URL)
+        val apiNameExtra = intent.getStringExtra(EXTRA_API_NAME)
+        if (urlExtra != null && apiNameExtra != null) {
+            loadResult(urlExtra, apiNameExtra)
+            return
+        }
+
         if (intent.action == Intent.ACTION_SEND) {
             val extraText = try { // I don't trust android
                 intent.getStringExtra(Intent.EXTRA_TEXT)

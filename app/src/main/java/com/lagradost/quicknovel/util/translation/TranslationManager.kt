@@ -12,10 +12,17 @@ import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.MainActivity
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.util.translation.models.TranslatorAgent
-import com.lagradost.safefile.closeQuietly
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
+
+fun Translator?.closeQuietly() {
+    try {
+        this?.close()
+    } catch (e: Exception) {
+        logError(e)
+    }
+}
 
 class TranslationManager {
     private val geminiTranslator = GeminiTranslateOnline(

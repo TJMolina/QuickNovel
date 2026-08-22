@@ -55,6 +55,15 @@
             tools:node="merge" />
 
         <receiver
+            android:name=".receivers.MarkAsSeenReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.lagradost.quicknovel.ACTION_MARK_AS_SEEN" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name="androidx.media.session.MediaButtonReceiver"
             android:exported="true">
             <intent-filter>

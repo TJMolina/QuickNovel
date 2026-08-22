@@ -40,10 +40,8 @@ import com.lagradost.quicknovel.BookDownloader2Helper.sanitizeFilename
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.DOWNLOAD_EPUB_LAST_ACCESS
 import com.lagradost.quicknovel.DOWNLOAD_EPUB_SIZE
-import com.lagradost.quicknovel.DefaultBookmark
 import com.lagradost.quicknovel.DownloadExtractLink
 import com.lagradost.quicknovel.DownloadLink
-import com.lagradost.quicknovel.DefaultLibrary
 import com.lagradost.quicknovel.DownloadProgressState
 import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION
@@ -234,6 +232,7 @@ data class ImmutableSearchResponse(
     val randomUuid: Uuid = Uuid.random(),
     /** The total chapter count, use chapters instead to also work on downloaded items */
     private val totalChapters: Long? = null,
+    val lastTotalChapters: Long? = null,
     /** The current download state, only present on "downloaded" items */
     val downloadState: ImmutableDownloadState? = null,
     /** The "synopsis" or "plot" of the item, absent for regular search results */
@@ -264,7 +263,17 @@ data class ImmutableSearchResponse(
 
     val chapters: Long? get() = totalChapters ?: downloadState?.total
     val isImported: Boolean get() = (apiName == IMPORT_SOURCE || apiName == IMPORT_SOURCE_PDF)
-    val hasNewChapters: Boolean get() = downloadState != null && epubSize != null && !isImported && epubSize < downloadState.progress
+    val hasNewChapters: Boolean get() = if (downloadState != null && epubSize != null) {
+        !isImported && epubSize < downloadState.progress
+    } else {
+        lastTotalChapters != null && totalChapters != null && lastTotalChapters < totalChapters
+    }
+
+    val newChaptersCount: Long get() = if (downloadState != null && epubSize != null) {
+        (downloadState.progress - epubSize).coerceAtLeast(0)
+    } else {
+        ((totalChapters ?: 0) - (lastTotalChapters ?: totalChapters ?: 0)).coerceAtLeast(0)
+    }
 
     val imageRequest
         get() = @Composable {
@@ -466,8 +475,12 @@ data class ImmutableSearchResponse(
         }
 
 
-        fun from(cache: ResultCached): ImmutableSearchResponse =
-            ImmutableSearchResponse(
+        fun from(cache: ResultCached): ImmutableSearchResponse {
+            val statusRes = cache.statusName?.let { name ->
+                runCatching { ReleaseStatus.valueOf(name).resource }.getOrNull()
+            }
+
+            return ImmutableSearchResponse(
                 name = cache.name,
                 url = cache.source,
                 posterUrl = cache.poster,
@@ -477,12 +490,14 @@ data class ImmutableSearchResponse(
                 id = cache.id,
                 timeOfCached = cache.cachedTime,
                 totalChapters = cache.totalChapters.toLong(),
+                lastTotalChapters = cache.lastTotalChapters?.toLong(),
                 author = cache.author,
                 synopsis = cache.synopsis,
-                statusRes = cache.status,
+                statusRes = statusRes,
                 timeOfPageOpened = timeOfPageOpened(cache.id),
                 chaptersRead = chaptersRead(cache.name)
             )
+        }
 
         fun from(
             id: Int,

@@ -321,6 +321,7 @@ fun ResultScreenImpl(
                         TextIcon(
                             stringResource(if (state.isWatching) R.string.updates_watching else R.string.updates_watch),
                             icon = if (state.isWatching) R.drawable.ic_baseline_notifications_active_24 else R.drawable.ic_baseline_notifications_outline_24,
+                            enabled = state.currentBookmark != 0,
                         ) {
                             action(ResultPageAction.ToggleWatch)
                         }
@@ -950,7 +951,7 @@ fun RowScope.TextInfo(
 }
 
 @Composable
-fun RowScope.TextIcon(text: String, icon: Int, onClick: () -> Unit) {
+fun RowScope.TextIcon(text: String, icon: Int, enabled: Boolean = true, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     Column(
         verticalArrangement = Arrangement.Center,
@@ -958,8 +959,12 @@ fun RowScope.TextIcon(text: String, icon: Int, onClick: () -> Unit) {
         modifier = Modifier
             .weight(1.0f)
             .fillMaxHeight()
-            .clickable(interactionSource = interactionSource, onClick = onClick)
-            .circle()
+            .then(
+                if (enabled) Modifier
+                    .clickable(interactionSource = interactionSource, onClick = onClick)
+                    .circle()
+                else Modifier.alpha(0.5f)
+            )
     ) {
         Text(
             text,

@@ -296,6 +296,8 @@ class ResultViewModel2(
 
     private fun toggleWatch() {
         val response = state.value.response ?: return
+        if (state.value.currentBookmark == 0) return
+
         val current = state.value.isWatching
         if (current) {
             UpdatesManager.removeFromWatchList(response.id ?: return)
@@ -398,12 +400,14 @@ class ResultViewModel2(
                 if (bookmarkId == 0) {
                     context.removeKey(RESULT_BOOKMARK_STATE, id.toString())
                     context.removeKey(RESULT_BOOKMARK, id.toString())
+                    UpdatesManager.removeFromWatchList(id)
                 } else {
                     context.setKey(RESULT_BOOKMARK_STATE, id.toString(), bookmarkId)
                 }
                 updateState {
                     copy(
                         currentBookmark = bookmarkId,
+                        isWatching = if (bookmarkId == 0) false else isWatching,
                         bookmarks = context.getBookmarks()
                     )
                 }

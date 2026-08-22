@@ -15,6 +15,9 @@
     <string name="no_author">Autor desconocido</string>
     <string name="no_data">No se encuentra ninguna informacion</string>
     <string name="info">Información</string>
+    <string name="general">General</string>
+    <string name="overall">General</string>
+    <string name="app_settings">Ajustes de la aplicación</string>
     <string name="home_more_info">Más información</string>
     <string name="battery_format">%d%%</string>
     <string name="novel">Novela</string>
@@ -33,6 +36,7 @@
 
     <!-- Búsqueda y Proveedores -->
     <string name="search">Búsqueda</string>
+    <string name="active_providers">%d proveedores activos</string>
     <string name="search_hint">Buscar novelas…</string>
     <string name="search_downloads">Buscar mis novelas…</string>
     <string name="advanced_search">Búsqueda avanzada</string>
@@ -42,13 +46,15 @@
     <string name="poster_open_source_descript">Ver fuente original</string>
     <string name="back_to_search">Volver a buscar</string>
     <string name="no_chapters_found">No se encontraron capítulos</string>
+    <string name="no_chapters">Sin capítulos</string>
+    <string name="error_outside_chapter">Salto inválido</string>
 
     <!-- Descargas y Gestión de Archivos -->
     <string name="downloads_text">Descargas</string>
     <string name="download">Descargar</string>
     <string name="download_text">Descargar</string>
     <string name="download_from_chapter">Descarga parcial</string>
-    <string name="download_path_key">download_path_key</string>
+    <string name="select_location">Seleccionar ubicación</string>
     <string name="download_path_pref">Ruta de descarga</string>
     <string name="download_started">Descarga iniciada</string>
     <string name="download_failed">Error en descarga</string>
@@ -90,7 +96,6 @@
     <string name="type_dropped">Abandonado</string>
     <string name="type_plan_to_read">Planeo leer</string>
     <string name="type_none">Ninguno</string>
-    <string name="library_manager_key" translatable="false">library_manager_key</string>
     <string name="library_manager_title">Gestionar bibliotecas</string>
     <string name="library_add">Agregar biblioteca</string>
     <string name="library_create">Crear biblioteca</string>
@@ -114,6 +119,7 @@
 
     <!-- Interfaz del Lector -->
     <string name="read_action_settings">Ajustes</string>
+    <string name="reader_settings">Ajustes del lector</string>
     <string name="read_action_chapters">Capítulos</string>
     <string name="read_action_chapters_formatted" formatted="true">%d Capítulos</string>
     <string name="select_chapter">Seleccionar capítulo</string>
@@ -173,6 +179,7 @@
     <string name="tts_voice_title">Voz de lectura (TTS)</string>
     <string name="tts_locale">Idioma</string>
     <string name="tts_voice">Voz</string>
+    <string name="tts_language_error">No se pudo inicializar TTS, descarga el idioma</string>
     <string name="start_chapter">Capitulos salteados</string>
     <string name="tts_speed">Velocidad de voz</string>
     <string name="tts_pitch">Tono de voz</string>
@@ -188,6 +195,8 @@
     <!-- Traducción -->
     <string name="google_translate">Traductor de Google</string>
     <string name="online_translate">Traducción online</string>
+    <string name="translate_from">Traducir desde el idioma</string>
+    <string name="translate_to">Traducir al idioma</string>
     <string name="download_ml">Descargar modelo de traducción</string>
     <string name="download_ml_long">Para traducir localmente se necesita descargar el modelo (~30MB)</string>
     <string name="translating">Traduciendo: </string>
@@ -197,7 +206,6 @@
 
 
     <!-- Configuración y Sistema -->
-    <string name="general">General</string>
     <string name="general_settings">Ajustes generales</string>
     <string name="locale_settings">Idioma de la aplicación</string>
     <string name="provider_lang_settings">Idiomas del proveedor</string>
@@ -220,8 +228,10 @@
 
     <!-- Copias de Seguridad (Backup) -->
     <string name="backup_settings">Copia de seguridad</string>
+    <string name="backup_location">Ubicación de copia de seguridad</string>
     <string name="restore_settings">Restaurar datos desde copia de seguridad</string>
     <string name="backup_success">Copia de seguridad realizada con éxito %s</string>
+    <string name="logcat_success">Logcat guardado con éxito en %s</string>
     <string name="backup_failed">Fallo al respaldar, verifique permisos de almacenamiento</string>
     <string name="restore_success">Copia de seguridad cargada con éxito</string>
     <string name="restore_failed_format" formatted="true">Error al restaurar desde %s</string>
@@ -241,6 +251,8 @@
     <string name="sort_downloads_descript">Ordenar descargas</string>
     <string name="default_sort">Por defecto</string>
     <string name="recently_sort">Abierto recientemente</string>
+    <string name="recently_checked_sort">Refrescado recientemente</string>
+    <string name="recently_visisted_sort">Leído recientemente</string>
     <string name="alpha_sort">Alfabético</string>
     <string name="alpha_sort_az">Alfabético (A-Z)</string>
     <string name="alpha_sort_za">Alfabético (Z-A)</string>
@@ -259,13 +271,12 @@
     <string name="reload_error">Error de conexión.</string>
     <string name="error_loading_novel">Error al cargar la novela</string>
     <string name="error_loading_chapter">Error al cargar el capítulo</string>
-    <string name="no_chapters">Sin capítulos</string>
     <string name="no_more_chapters">No hay más capítulos</string>
-    <string name="error_outside_chapter">Posición inválida (fuera del capítulo)</string>
     <string name="nothing_read_recently">No has leído nada recientemente</string>
     <string name="ongoing">En curso</string>
     <string name="paused">Pausado</string>
     <string name="stopped">Detenido</string>
+    <string name="download_in_progress">Descargando…</string>
     <string name="failed">Falló</string>
     <string name="dropped">Abandonado</string>
     <string name="stubbed">Recortado (Stubbed)</string>
@@ -279,6 +290,7 @@
     <!-- Diálogos de Confirmación -->
     <string name="remove_from_history_format">¿Estás seguro de que quieres eliminar %s del historial?</string>
     <string name="permanently_delete_format">¿Estás seguro de eliminar permanentemente %s?</string>
+    <string name="remove_from_bookmarks_format">Esto eliminará %s de tus marcadores.\n¿Estás seguro?</string>
     <string name="remove_all_history">¿Estás seguro? Se perderá todo el historial.</string>
 
     <!-- Sistema y Miscelánea -->
@@ -287,6 +299,8 @@
     <string name="clipboard_permission_error">Error de permisos al acceder al portapapeles.</string>
     <string name="clipboard_unknown_error">Error desconocido al copiar datos.</string>
     <string name="show_log_cat">Ver registros (Logcat) 🐈</string>
+    <string name="log_cat">Logcat 🐈</string>
+    <string name="log_cat_location">Ubicación de Logcat</string>
     <string name="unread">Sin leer</string>
     <string name="bookmark">Marcador</string>
     <string name="read">Leído</string>
@@ -298,15 +312,32 @@
     <string name="copylog">Copiar registro</string>
     <string name="history">Historial</string>
     <string name="explore">Explorar</string>
-    <string name="provider_list_key">provider_list</string>
-    <string name="search_providers_list_key">search_providers_list</string>
-    <string name="auto_update_key">auto_update</string>
-    <string name="external_reader_key">external_reader</string>
-    <string name="remove_external_key">remove_external</string>
-    <string name="manual_check_update_key">manual_check_update</string>
-    <string name="backup_key">backup_key</string>
-    <string name="rating_format_key">rating_format</string>
-    <string name="grid_format_key">grid_format</string>
+
+    <!-- Keys (No traducibles) -->
+    <string name="locale_key" translatable="false">locale_key</string>
+    <string name="provider_lang_key" translatable="false">provider_lang_key</string>
+    <string name="restore_key" translatable="false">restore_key</string>
+    <string name="download_path_key" translatable="false">download_path_key</string>
+    <string name="rating_format_key" translatable="false">rating_format</string>
+    <string name="grid_format_key" translatable="false">grid_format</string>
+    <string name="provider_list_key" translatable="false">provider_list</string>
+    <string name="search_providers_list_key" translatable="false">search_providers_list</string>
+    <string name="auto_update_key" translatable="false">auto_update</string>
+    <string name="external_reader_key" translatable="false">external_reader</string>
+    <string name="remove_external_key" translatable="false">remove_external</string>
+    <string name="manual_check_update_key" translatable="false">manual_check_update</string>
+    <string name="backup_key" translatable="false">backup_key</string>
+    <string name="download_list_view_key" translatable="false">download_list_view_key</string>
+    <string name="history_list_view_key" translatable="false">history_list_view_key</string>
+    <string name="search_list_view_key" translatable="false">search_list_view_key</string>
+    <string name="logcat_path_key" translatable="false">logcat_path_key</string>
+    <string name="epub_path_key" translatable="false">epub_path_key</string>
+    <string name="backup_path_key" translatable="false">backup_path_key</string>
+    <string name="show_logcat_key" translatable="false">show_logcat_key</string>
+    <string name="novel_auto_update_enabled_key" translatable="false">novel_auto_update_enabled</string>
+    <string name="novel_auto_update_interval_key" translatable="false">novel_auto_update_interval</string>
+    <string name="library_manager_key" translatable="false">library_manager_key</string>
+
     <string name="download_open_action">Abrir</string>
     <string name="download_read_action">Leer</string>
     <string name="download_update_action">Actualizar</string>

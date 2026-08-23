@@ -71,6 +71,7 @@ import com.lagradost.quicknovel.util.Event
 import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.pmap
+import com.lagradost.quicknovel.util.updates.data.UpdatesManager
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPage
@@ -413,6 +414,8 @@ object BookDownloader2Helper {
             File(
                 context.filesDir.toString() + getDirectory(sFromApiName, sFromAuthor, sFromName)
             )
+        if (!fromDir.exists()) return
+
         val toDir =
             File(
                 context.filesDir.toString() + getDirectory(sToApiName, sToAuthor, sToName)
@@ -1509,6 +1512,70 @@ object BookDownloader2 {
         val page: Int,
     )
 
+    suspend fun migrateNovel(
+        context: Context,
+        oldId: Int,
+        oldAuthor: String?,
+        oldName: String,
+        oldApiName: String,
+        newResponse: ImmutableSearchResponse
+    ) {
+        val newId = newResponse.id ?: return
+        if (oldId == newId) return
+
+        migrationNovelMutex.withLock<Unit> {
+            migrateKeys(oldId, newId, oldName, newResponse.name)
+
+            // Update metadata in DownloadData folder if it exists
+            getKey<DownloadFragment.DownloadData>(DOWNLOAD_FOLDER, newId.toString())?.let { oldDownloadData ->
+                val updatedDownloadData = oldDownloadData.copy(
+                    name = newResponse.name,
+                    author = newResponse.author,
+                    posterUrl = newResponse.posterUrl ?: oldDownloadData.posterUrl,
+                    rating = newResponse.rating ?: oldDownloadData.rating,
+                    synopsis = newResponse.synopsis ?: oldDownloadData.synopsis,
+                    tags = newResponse.tags ?: oldDownloadData.tags,
+                    status = newResponse.statusRes ?: oldDownloadData.status
+                )
+                setKey(DOWNLOAD_FOLDER, newId.toString(), updatedDownloadData)
+            }
+
+            BookDownloader2Helper.copyAllData(
+                context,
+                oldAuthor,
+                oldName,
+                oldApiName,
+                newResponse.author,
+                newResponse.name,
+                newResponse.apiName
+            )
+            deleteNovelAsync(context, oldAuthor, oldName, oldApiName)
+            UpdatesManager.migrateWatchList(oldId, newId, newResponse.toResultCached(newId))
+
+            //This is very unlikely to happen, but you never know
+            downloadInfoMutex.withLock {
+                downloadData[oldId]?.let { data ->
+                    downloadData[newId] = data
+                    downloadData -= oldId
+                }
+                downloadProgress[oldId]?.let { progress ->
+                    downloadProgress[newId] = progress
+                    downloadProgress -= oldId
+                }
+            }
+
+            //delete old visual
+            bookmarkChanged.invoke(oldId)
+            downloadRemoved.invoke(oldId)
+
+            //add new visual
+            bookmarkChanged.invoke(newId)
+            getKey<DownloadFragment.DownloadData>(DOWNLOAD_FOLDER, newId.toString())?.let {
+                downloadDataChanged.invoke(newId to it)
+            }
+        }
+    }
+
     private fun initDownloadProgress() = CoroutineScope(Dispatchers.Default).launchSafe {
         downloadInfoMutex.withLock {
             // 1. 1000ms startup time from reading the *first* key <- this cant be optimized without better db
@@ -1594,66 +1661,47 @@ object BookDownloader2 {
         return data
     }
 
-    private fun migrateKeys(from: Int, to: Int, oldName: String, newName: String) {
-        setKey(
-            DOWNLOAD_TOTAL, to.toString(),
-            getKey<Int>(DOWNLOAD_TOTAL, from.toString())
-        )
-        setKey(
-            DOWNLOAD_FOLDER, to.toString(),
-            getKey<DownloadFragment.DownloadData>(DOWNLOAD_FOLDER, from.toString())
-        )
-        setKey(
-            DOWNLOAD_EPUB_SIZE, to.toString(),
-            getKey<Int>(DOWNLOAD_EPUB_SIZE, from.toString())
-        )
+    internal fun migrateKeys(from: Int, to: Int, oldName: String, newName: String) {
+        val fromId = from.toString()
+        val toId = to.toString()
 
-        setKey(
-            DOWNLOAD_OFFSET, to.toString(),
-            getKey<Int>(DOWNLOAD_OFFSET, from.toString())
-        )
+        setKey(DOWNLOAD_TOTAL, toId, getKey<Int>(DOWNLOAD_TOTAL, fromId))
+        removeKey(DOWNLOAD_TOTAL, fromId)
 
-        setKey(
-            HISTORY_FOLDER, to.toString(),
-            getKey<ResultCached>(HISTORY_FOLDER, from.toString())
-        )
-        removeKey(HISTORY_FOLDER, from.toString())
+        setKey(DOWNLOAD_FOLDER, toId, getKey<DownloadFragment.DownloadData>(DOWNLOAD_FOLDER, fromId))
+        removeKey(DOWNLOAD_FOLDER, fromId)
 
-        setKey(
-            RESULT_BOOKMARK, to.toString(),
-            getKey<ResultCached>(RESULT_BOOKMARK, from.toString())
-        )
-        removeKey(RESULT_BOOKMARK, from.toString())
+        setKey(DOWNLOAD_EPUB_SIZE, toId, getKey<Int>(DOWNLOAD_EPUB_SIZE, fromId))
+        removeKey(DOWNLOAD_EPUB_SIZE, fromId)
 
-        setKey(
-            RESULT_BOOKMARK_STATE, to.toString(),
-            getKey<Int>(RESULT_BOOKMARK_STATE, from.toString())
-        )
-        removeKey(RESULT_BOOKMARK_STATE, from.toString())
+        setKey(DOWNLOAD_OFFSET, toId, getKey<Int>(DOWNLOAD_OFFSET, fromId))
+        removeKey(DOWNLOAD_OFFSET, fromId)
 
-        setKey(
-            DOWNLOAD_EPUB_LAST_ACCESS, to.toString(),
-            getKey<Long>(DOWNLOAD_EPUB_LAST_ACCESS, from.toString())
-        )
+        setKey(HISTORY_FOLDER, toId, getKey<ResultCached>(HISTORY_FOLDER, fromId))
+        removeKey(HISTORY_FOLDER, fromId)
 
-        setKey(
-            EPUB_CURRENT_POSITION, newName,
-            getKey<Int>(EPUB_CURRENT_POSITION, oldName)
-        )
+        setKey(RESULT_BOOKMARK, toId, getKey<ResultCached>(RESULT_BOOKMARK, fromId))
+        removeKey(RESULT_BOOKMARK, fromId)
 
-        setKey(
-            EPUB_CURRENT_POSITION_CHAPTER, newName,
-            getKey<String>(EPUB_CURRENT_POSITION_CHAPTER, oldName)
-        )
+        setKey(RESULT_BOOKMARK_STATE, toId, getKey<Int>(RESULT_BOOKMARK_STATE, fromId))
+        removeKey(RESULT_BOOKMARK_STATE, fromId)
 
-        setKey(
-            EPUB_CURRENT_POSITION_SCROLL, newName,
-            getKey<Int>(EPUB_CURRENT_POSITION_SCROLL, oldName)
-        )
-        setKey(
-            EPUB_CURRENT_POSITION_SCROLL_CHAR, newName,
-            getKey<Int>(EPUB_CURRENT_POSITION_SCROLL_CHAR, oldName)
-        )
+        setKey(DOWNLOAD_EPUB_LAST_ACCESS, toId, getKey<Long>(DOWNLOAD_EPUB_LAST_ACCESS, fromId))
+        removeKey(DOWNLOAD_EPUB_LAST_ACCESS, fromId)
+
+        if (oldName != newName) {
+            setKey(EPUB_CURRENT_POSITION, newName, getKey<Int>(EPUB_CURRENT_POSITION, oldName))
+            removeKey(EPUB_CURRENT_POSITION, oldName)
+
+            setKey(EPUB_CURRENT_POSITION_CHAPTER, newName, getKey<String>(EPUB_CURRENT_POSITION_CHAPTER, oldName))
+            removeKey(EPUB_CURRENT_POSITION_CHAPTER, oldName)
+
+            setKey(EPUB_CURRENT_POSITION_SCROLL, newName, getKey<Int>(EPUB_CURRENT_POSITION_SCROLL, oldName))
+            removeKey(EPUB_CURRENT_POSITION_SCROLL, oldName)
+
+            setKey(EPUB_CURRENT_POSITION_SCROLL_CHAR, newName, getKey<Int>(EPUB_CURRENT_POSITION_SCROLL_CHAR, oldName))
+            removeKey(EPUB_CURRENT_POSITION_SCROLL_CHAR, oldName)
+        }
     }
 
     private val migrationNovelMutex = Mutex()

@@ -171,6 +171,13 @@ class HistoryViewModel2 : ViewModel(),
                 }
             }
         }
+        BookDownloader2.bookmarkChanged += { updateHistory() }
+        BookDownloader2.downloadRemoved += { updateHistory() }
+    }
+
+    override fun onCleared() {
+        BookDownloader2.bookmarkChanged -= { updateHistory() }
+        BookDownloader2.downloadRemoved -= { updateHistory() }
     }
 
     private fun updateHistory() = viewModelScope.launch {

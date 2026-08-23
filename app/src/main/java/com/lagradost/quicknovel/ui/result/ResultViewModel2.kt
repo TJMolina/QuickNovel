@@ -53,7 +53,6 @@ import com.lagradost.quicknovel.util.updates.data.UpdatesManager
 import com.lagradost.quicknovel.updateBookmark
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromName
-import com.lagradost.quicknovel.util.ResultCached
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
@@ -173,39 +172,6 @@ class ResultViewModel2(
                 )
             }
         }
-        fun toResultCached(response: ImmutableSearchResponse): ResultCached {
-            val statusName = response.loadData?.status?.name ?: response.statusRes?.let { resId ->
-                com.lagradost.quicknovel.ReleaseStatus.entries.find { it.resource == resId }?.name
-            }
-
-            return ResultCached(
-                source = response.url,
-                name = response.name,
-                apiName = response.apiName,
-                id = response.id ?: 0,
-                author = response.author,
-                poster = response.posterUrl,
-                tags = response.tags?.toList(),
-                rating = response.rating,
-                totalChapters = response.chapters?.toInt() ?: 1,
-                lastTotalChapters = response.lastTotalChapters?.toInt(),
-                cachedTime = System.currentTimeMillis(),
-                synopsis = response.synopsis,
-                posterHeaders = response.posterHeaders?.toMap(),
-                statusName = statusName
-            )
-        }
-
-        fun addToHistory(response: ImmutableSearchResponse, bookmarkId: Int? = null) {
-            val id = response.id ?: return
-            val finalBookmarkId =
-                bookmarkId ?: getKey<Int>(RESULT_BOOKMARK_STATE, id.toString()) ?: 0
-            val cached = toResultCached(response)
-            setKey(HISTORY_FOLDER, id.toString(), cached)
-            if (finalBookmarkId > 0) {
-                setKey(RESULT_BOOKMARK, id.toString(), cached)
-            }
-        }
     }
 
     init {
@@ -299,10 +265,11 @@ class ResultViewModel2(
         if (state.value.currentBookmark == 0) return
 
         val current = state.value.isWatching
+        val id = response.id ?: return
         if (current) {
-            UpdatesManager.removeFromWatchList(response.id ?: return)
+            UpdatesManager.removeFromWatchList(id)
         } else {
-            UpdatesManager.addToWatchList(toResultCached(response))
+            UpdatesManager.addToWatchList(response.toResultCached(id))
         }
         updateState { copy(isWatching = !current) }
     }
@@ -315,13 +282,9 @@ class ResultViewModel2(
         val finalApiName = api?.name ?: result?.apiName ?: return@launch
         val finalUrl = url ?: result?.url ?: return@launch
         val isImported = (finalApiName == IMPORT_SOURCE || finalApiName == IMPORT_SOURCE_PDF)
-        val bookId = id ?: result?.id ?: BookDownloader2Helper.generateId(
-            finalApiName,
-            result?.author,
-            result?.name ?: ""
-        )
+        val bookId = id ?: result?.id
 
-        if (!isPreview) {
+        if (!isPreview && bookId != null) {
             ImmutableSearchResponse.setTimeOfPageOpened(bookId, System.currentTimeMillis())
             BookDownloader2.openChanged(bookId)
         }
@@ -352,12 +315,6 @@ class ResultViewModel2(
         }
 
         apiRepo.loadResult(finalUrl).onSuccess { fullResponse ->
-            val freshBookmarkId = with(DataStore) {
-                context.getKey<Int>(
-                    RESULT_BOOKMARK_STATE,
-                    bookId.toString()
-                )
-            } ?: 0
 
             val mergedResponse = if (fullResponse.posterUrl.isNullOrBlank()) {
                 fullResponse.copy(
@@ -365,10 +322,25 @@ class ResultViewModel2(
                     posterHeaders = result?.posterHeaders
                 )
             } else fullResponse
-            
+
             val finalResponse = mergedResponse.copy(
                 lastTotalChapters = if (!isPreview) fullResponse.chapters else result?.lastTotalChapters
             )
+
+            val newId = finalResponse.id ?: bookId
+            val freshBookmarkId = getKey<Int>(RESULT_BOOKMARK_STATE,newId.toString()) ?: 0
+            
+            //Migrate if needed
+            if (bookId != null && bookId != newId && !isPreview && finalResponse.name.isNotBlank()) {
+                BookDownloader2.migrateNovel(
+                    context,
+                    oldId = bookId,
+                    oldAuthor = result?.author,
+                    oldName = result?.name ?: "",
+                    oldApiName = finalApiName,
+                    newResponse = finalResponse
+                )
+            }
 
             updateState {
                 copy(
@@ -379,7 +351,7 @@ class ResultViewModel2(
                     responseError = null
                 )
             }
-            addToHistory(finalResponse, freshBookmarkId)
+            ImmutableSearchResponse.addToHistory(finalResponse, freshBookmarkId)
         }.onFailure { error ->
             updateState {
                 copy(
@@ -403,6 +375,7 @@ class ResultViewModel2(
                     UpdatesManager.removeFromWatchList(id)
                 } else {
                     context.setKey(RESULT_BOOKMARK_STATE, id.toString(), bookmarkId)
+                    ImmutableSearchResponse.addToHistory(data, bookmarkId)
                 }
                 updateState {
                     copy(

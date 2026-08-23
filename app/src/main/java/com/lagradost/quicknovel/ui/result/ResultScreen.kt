@@ -237,9 +237,10 @@ fun ResultScreenImpl(
                     if (response.author != null) {
                         Text(response.author, color = colors.primary, fontSize = 14.sp)
                     }
-                    response.loadData?.status?.let { status ->
+                    val statusRes = response.loadData?.status?.resource ?: response.statusRes
+                    if (statusRes != null) {
                         Text(
-                            stringResource(status.resource),
+                            stringResource(statusRes),
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )

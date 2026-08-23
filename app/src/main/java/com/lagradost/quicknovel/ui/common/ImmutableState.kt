@@ -329,6 +329,10 @@ data class ImmutableSearchResponse(
     fun toResultCached(
         id: Int,
     ): ResultCached {
+        val statusName = loadData?.status?.name ?: statusRes?.let { resId ->
+            ReleaseStatus.entries.find { it.resource == resId }?.name
+        }
+
         return ResultCached(
             source = url,
             name = name,
@@ -338,10 +342,12 @@ data class ImmutableSearchResponse(
             poster = posterUrl,
             tags = tags,
             rating = rating,
-            totalChapters = loadData?.chapters?.size ?: 1,
+            totalChapters = totalChapters?.toInt() ?: 0,
+            lastTotalChapters = lastTotalChapters?.toInt(),
             cachedTime = System.currentTimeMillis(),
             synopsis = synopsis,
-            posterHeaders = posterHeaders
+            posterHeaders = posterHeaders,
+            statusName = statusName
         )
     }
 
@@ -395,12 +401,16 @@ data class ImmutableSearchResponse(
         fun chaptersRead(name: String): Int =
             getKey<Int>(EPUB_CURRENT_POSITION, name)?.let { it + 1 } ?: 0
 
-        fun addToHistory(response: ImmutableSearchResponse) {
+        fun addToHistory(response: ImmutableSearchResponse, bookmarkId: Int? = null) {
             val id = response.id ?: return
-            // we won't add it to history from cache
-            setKey(
-                HISTORY_FOLDER, id.toString(), response.toResultCached(id)
-            )
+            val finalBookmarkId =
+                bookmarkId ?: getKey<Int>(com.lagradost.quicknovel.RESULT_BOOKMARK_STATE, id.toString()) ?: 0
+            val cached = response.toResultCached(id)
+
+            setKey(HISTORY_FOLDER, id.toString(), cached)
+            if (finalBookmarkId > 0) {
+                setKey(com.lagradost.quicknovel.RESULT_BOOKMARK, id.toString(), cached)
+            }
         }
 
         fun timeOfPageOpened(id: Int): Long = getKey<Long>(

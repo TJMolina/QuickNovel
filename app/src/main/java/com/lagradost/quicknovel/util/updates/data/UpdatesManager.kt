@@ -10,8 +10,6 @@ import com.lagradost.quicknovel.NOVEL_WATCH_FOLDER
 import com.lagradost.quicknovel.RESULT_BOOKMARK
 import com.lagradost.quicknovel.util.ResultCached
 object UpdatesManager {
-
-    // ── CRUD ────────────────────────────────────────────────────────────────
     fun addToWatchList(cached: ResultCached) {
         if (isWatched(cached.id)) return
         setKey(NOVEL_WATCH_FOLDER, cached.id.toString(), cached)
@@ -21,7 +19,7 @@ object UpdatesManager {
         removeKey(NOVEL_WATCH_FOLDER, novelId.toString())
     }
 
-    fun isWatched(novelId: Int): Boolean =
+    fun isWatched(novelId: Int?): Boolean =
         getKey<ResultCached>(NOVEL_WATCH_FOLDER, novelId.toString()) != null
 
     fun getWatchList(): List<ResultCached> {
@@ -34,6 +32,13 @@ object UpdatesManager {
 
     fun saveEntry(entry: ResultCached) {
         setKey(RESULT_BOOKMARK, entry.id.toString(), entry)
+    }
+
+    fun migrateWatchList(oldId: Int, newId: Int, newEntry: ResultCached) {
+        if (isWatched(oldId)) {
+            removeFromWatchList(oldId)
+            addToWatchList(newEntry)
+        }
     }
 
     /** Moves lastTotalChapters forward so the "new" badge disappears. */

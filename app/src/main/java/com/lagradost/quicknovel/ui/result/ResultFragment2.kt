@@ -44,9 +44,9 @@ class ResultFragment2 : Fragment() {
                         viewModel.onAction(
                             ResultPageAction.LoadResult(
                                 isPreview = false,
+                                id = id,
                                 url = url,
                                 apiName = apiName,
-                                id = id
                             )
                         )
                     }

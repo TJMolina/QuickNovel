@@ -245,6 +245,7 @@ fun SearchResponseRow(
                 overflow = TextOverflow.Ellipsis
             )
 
+            val chapters = response.chapters
             val text =
                 if (response.downloadState != null && response.downloadState.progress != response.downloadState.total) {
                     "${response.downloadState.progress}/${response.downloadState.total} ${
@@ -254,7 +255,7 @@ fun SearchResponseRow(
                             )
                         } else {
                             stringResource(
-                                if (response.chapters == 1L) {
+                                if (chapters == 1L) {
                                     R.string.chapter
                                 } else {
                                     R.string.chapters
@@ -262,12 +263,12 @@ fun SearchResponseRow(
                             )
                         }
                     }"
-                } else if (response.chapters != null) {
+                } else if (chapters != null && chapters > 0) {
                     if (response.id != null && response.downloadState == null) {
                         // Do not show response.chaptersRead for downloaded items, as it looks weird
-                        "${response.chaptersRead}/${response.chapters} ${
+                        "${response.chaptersRead}/$chapters ${
                             stringResource(
-                                if (response.chapters == 1L) {
+                                if (chapters == 1L) {
                                     R.string.chapter
                                 } else {
                                     R.string.chapters
@@ -275,9 +276,9 @@ fun SearchResponseRow(
                             )
                         }"
                     } else {
-                        "${response.chapters} ${
+                        "$chapters ${
                             stringResource(
-                                if (response.chapters == 1L) {
+                                if (chapters == 1L) {
                                     R.string.chapter
                                 } else {
                                     R.string.chapters

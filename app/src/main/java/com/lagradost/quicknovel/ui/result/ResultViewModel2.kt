@@ -315,7 +315,6 @@ class ResultViewModel2(
         }
 
         apiRepo.loadResult(finalUrl).onSuccess { fullResponse ->
-
             val mergedResponse = if (fullResponse.posterUrl.isNullOrBlank()) {
                 fullResponse.copy(
                     posterUrl = result?.posterUrl,
@@ -340,6 +339,7 @@ class ResultViewModel2(
                     oldApiName = finalApiName,
                     newResponse = finalResponse
                 )
+                this@ResultViewModel2.id = newId
             }
 
             updateState {
@@ -348,7 +348,8 @@ class ResultViewModel2(
                     loadingResponse = false,
                     currentBookmark = freshBookmarkId,
                     showMoreInfo = true,
-                    responseError = null
+                    responseError = null,
+                    isWatching = UpdatesManager.isWatched(newId)
                 )
             }
             ImmutableSearchResponse.addToHistory(finalResponse, freshBookmarkId)

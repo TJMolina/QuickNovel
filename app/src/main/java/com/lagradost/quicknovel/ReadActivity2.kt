@@ -403,7 +403,13 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         textLayoutManager.scrollToPositionWithOffset(adapterPosition, 1)
 
         // don't inner-seek if zero because that is chapter break
-        if (desired.innerIndex == 0) return
+        if (desired.innerIndex == 0) {
+            binding.realText.post {
+                viewModel.stopSeeking()
+                onScroll()
+            }
+            return
+        }
 
         binding.realText.post {
             getAllLines().also { postLines(it) }.firstOrNull { line ->
@@ -413,6 +419,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 //binding.tmpTtsEnd2.fixLine(line.bottom)
                 binding.realText.scrollBy(0, line.top - getTopY())
             }
+            viewModel.stopSeeking()
+            onScroll()
         }
 
         /*desired.firstVisibleChar?.let { visible ->
@@ -1045,6 +1053,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 RecyclerView.OnScrollListener() {
                 var updateFromCode = false
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    if (viewModel.isSeeking) return
+
                     if (dy != 0 && !updateFromCode) {
                         var rdy = dy
 
@@ -1067,16 +1077,6 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                         } else if (currentOverScroll > 0.0f && rdy > 0) {
                             rdy = 0
                         }
-                        /*println("currentOverScrollTranslation=$currentOverScrollTranslation rdy=$rdy")
-                        val dscroll = minOf(currentOverScrollTranslation.absoluteValue.toInt(), rdy.absoluteValue)
-                        if(currentOverScrollTranslation < 0 && rdy < 0) {
-                            currentOverScrollTranslation += dscroll
-                            rdy += dscroll
-                        }
-                        if(currentOverScrollTranslation > 0 && rdy > 0) {
-                            currentOverScrollTranslation -= dscroll
-                            rdy -= dscroll
-                        }*/
 
                         currentScroll += dy
                         val delta = rdy - dy
@@ -1086,14 +1086,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                         }
                     } else {
                         updateFromCode = false
-                        onScroll()
                     }
-
-                    super.onScrolled(recyclerView, dx, dy)
-
-                    // binding.tmpTtsEnd.fixLine((getBottomY()- remainingBottom) + 7.toPx)
-                    // binding.tmpTtsStart.fixLine(remainingTop + 7.toPx)
-
+                    onScroll()
                 }
 
                 //this is to reduce onScroll calls
@@ -1113,13 +1107,17 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
             if (chapter.seekToDesired) {
                 textAdapter.submitIncomparableList(chapter.data) {
-                    viewModel._loadingStatus.postValue(Resource.Success(true))
+                    if (chapter.isTargetChapterReady) {
+                        viewModel._loadingStatus.postValue(Resource.Success(true))
+                    }
                     scrollToDesired()
                     onScroll()
                 }
             } else {
                 textAdapter.submitList(chapter.data) {
-                    viewModel._loadingStatus.postValue(Resource.Success(true))
+                    if (chapter.isTargetChapterReady) {
+                        viewModel._loadingStatus.postValue(Resource.Success(true))
+                    }
                     onScroll()
                 }
             }
@@ -1341,9 +1339,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             binding.readOnlineTranslationSwitch.isChecked = viewModel.currentAgent != TranslatorAgent.OFFLINE
             binding.readOnlineTranslationSwitch.setOnCheckedChangeListener { _, isChecked ->
                 viewModel.mlTranslationAgent = if (isChecked) {
-                    TranslatorAgent.GEMINI.ordinal
+                    TranslatorAgent.ONLINE.name
                 } else {
-                    TranslatorAgent.OFFLINE.ordinal
+                    TranslatorAgent.OFFLINE.name
                 }
                 //Do not allow automatic detection of the target language; the user should know that themselves (they should know the name of their own language).
                 //It could probably be automated, but I have no idea.

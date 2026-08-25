@@ -455,7 +455,8 @@ data class LiveChapterData(
 
 data class ChapterUpdate(
     val data: ArrayList<SpanDisplay>,
-    val seekToDesired: Boolean
+    val seekToDesired: Boolean,
+    val isTargetChapterReady: Boolean = false
 )
 
 class ReadActivityViewModel : ViewModel() {
@@ -567,8 +568,8 @@ class ReadActivityViewModel : ViewModel() {
     private val chapterMutex = Mutex()
     private val chapterExpandMutex = Mutex()
 
-    private val loadingJobs = ConcurrentHashMap<Int, Job>()
     private val requested: MutableSet<Int> = Collections.synchronizedSet(mutableSetOf<Int>())
+    private val loadingJobs = ConcurrentHashMap<Int, Job>()
 
     private val loading: HashSet<Int> = hashSetOf()
     private val chapterData: HashMap<Int, Resource<LiveChapterData>?> = hashMapOf()
@@ -576,6 +577,14 @@ class ReadActivityViewModel : ViewModel() {
 
     var currentIndex = Int.MIN_VALUE
         private set
+
+    var isSeeking = false
+        private set
+
+    fun stopSeeking() {
+        isSeeking = false
+        updateReadArea()
+    }
 
 
 
@@ -624,29 +633,36 @@ class ReadActivityViewModel : ViewModel() {
         index: Int,
         notify: Boolean = true,
         postLoading: Boolean = false,
-    ) = coroutineScope {
+    ) {
         val range =
             if (!notify) (index - initPaddingBottom..index + initPaddingTop)
             else (index - chapterPaddingBottom..index + chapterPaddingTop)
 
-        // Prioritize chapters closest to current index
-        val sortedRange = range.sortedBy { abs(it - currentIndex) }
+        // 1. Load the target chapter first (blocking if postLoading = true)
+        loadIndividualChapter(index, notify = notify, postLoading = postLoading)
+        requested += index
 
-        for (idx in sortedRange) {
-            if (requested.contains(idx)) {
-                // If it's already requested but the job is dead, we might want to retry
-                val job = loadingJobs[idx]
-                if (job == null || !job.isActive) {
-                    // fallthrough to start it
-                } else {
-                    continue
+        // 2. Load the rest sequentially in background (non-blocking)
+        // We load forwards padding first, then backwards to minimize jumps
+        viewModelScope.launch(Dispatchers.IO) {
+            // Forward
+            for (idx in index + 1..range.last) {
+                if (requested.contains(idx) || idx < 0 || idx >= book.size()) continue
+                requested += idx
+                val job = launch {
+                    loadIndividualChapter(idx, notify = true, postLoading = false)
                 }
+                loadingJobs[idx] = job
             }
-            requested += idx
-            val job = launch(Dispatchers.IO) {
-                loadIndividualChapter(idx, notify = notify, postLoading = postLoading)
+            // Backward
+            for (idx in range.first until index) {
+                if (requested.contains(idx) || idx < 0 || idx >= book.size()) continue
+                requested += idx
+                val job = launch {
+                    loadIndividualChapter(idx, notify = true, postLoading = false)
+                }
+                loadingJobs[idx] = job
             }
-            loadingJobs[idx] = job
         }
         cancelDistantChapters(index)
     }
@@ -659,11 +675,11 @@ class ReadActivityViewModel : ViewModel() {
         val iterator = loadingJobs.entries.iterator()
         while (iterator.hasNext()) {
             val entry = iterator.next()
-            val index = entry.key
-            if (index !in min..max) {
+            val chapterIndex = entry.key
+            if (chapterIndex !in min..max) {
                 entry.value.cancel()
                 iterator.remove()
-                requested.remove(index)
+                requested.remove(chapterIndex)
             }
         }
     }
@@ -762,56 +778,45 @@ class ReadActivityViewModel : ViewModel() {
         val cIndex = currentIndex
         val chapters = ArrayList<SpanDisplay>()
         val canReload = this.book.canReload
+
+        fun addChapter(idx: Int, forceHiding: Boolean) {
+            if (idx < 0 || idx >= book.size()) return
+            // Stealth Padding: Hide loading chapters above us while seeking to ensure stable anchoring
+            if (forceHiding && isSeeking && chapterData[idx] !is Resource.Success) return
+
+            chaptersTitlesInternal.getOrNull(idx)?.let { text ->
+                chapters.add(ChapterStartSpanned(idx, 0, text, canReload))
+            }
+            chapters.addAll(chapterIdxToSpanDisplay(idx))
+        }
+
         when (readerType) {
             ReadingType.DEFAULT, ReadingType.INF_SCROLL -> {
                 for (idx in cIndex - chapterPaddingBottom..cIndex + chapterPaddingTop) {
-                    if (idx < chaptersTitlesInternal.size && idx >= 0)
-                        chapters.add(
-                            ChapterStartSpanned(
-                                idx,
-                                0,
-                                chaptersTitlesInternal[idx],
-                                canReload
-                            )
-                        )
-                    chapters.addAll(chapterIdxToSpanDisplay(idx))
+                    addChapter(idx, forceHiding = idx < cIndex)
                 }
             }
 
             ReadingType.BTT_SCROLL -> {
-                chapterIdxToSpanDisplayNextButton(cIndex - 1, cIndex)?.let {
-                    chapters.add(it)
-                }
-
-                chaptersTitlesInternal.getOrNull(cIndex)?.let { text ->
-                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload))
-                }
-
-                chapters.addAll(chapterIdxToSpanDisplay(cIndex))
-
-                chapterIdxToSpanDisplayNextButton(cIndex + 1, cIndex)?.let {
-                    chapters.add(it)
-                }
+                chapterIdxToSpanDisplayNextButton(cIndex - 1, cIndex)?.let { chapters.add(it) }
+                addChapter(cIndex, forceHiding = false)
+                chapterIdxToSpanDisplayNextButton(cIndex + 1, cIndex)?.let { chapters.add(it) }
             }
 
             ReadingType.OVERSCROLL_SCROLL -> {
-                chapterIdxToSpanDisplayOverscrollButton(cIndex - 1, cIndex)?.let {
-                    chapters.add(it)
-                }
-
-                chaptersTitlesInternal.getOrNull(cIndex)?.let { text ->
-                    chapters.add(ChapterStartSpanned(cIndex, 0, text, canReload))
-                }
-
-                chapters.addAll(chapterIdxToSpanDisplay(cIndex))
-
-                chapterIdxToSpanDisplayOverscrollButton(cIndex + 1, cIndex)?.let {
-                    chapters.add(it)
-                }
+                chapterIdxToSpanDisplayOverscrollButton(cIndex - 1, cIndex)?.let { chapters.add(it) }
+                addChapter(cIndex, forceHiding = false)
+                chapterIdxToSpanDisplayOverscrollButton(cIndex + 1, cIndex)?.let { chapters.add(it) }
             }
         }
 
-        _chapterData.postValue(ChapterUpdate(data = chapters, seekToDesired = seekToDesired))
+        _chapterData.postValue(
+            ChapterUpdate(
+                data = chapters,
+                seekToDesired = seekToDesired,
+                isTargetChapterReady = chapterData[currentIndex] is Resource.Success
+            )
+        )
     }
 
     private fun notifyChapterUpdate(index: Int, seekToDesired: Boolean = false) {
@@ -833,15 +838,22 @@ class ReadActivityViewModel : ViewModel() {
     ) {
         if (index < 0) return
 
-        if (reTranslate || reload) {
-            loadingJobs[index]?.cancel()
+        // Wait if already loading, so that we can wait for the result if this was called with postLoading=true
+        while (true) {
+            val isLoading = chapterMutex.withLock { loading.contains(index) }
+            if (!isLoading) break
+            delay(100)
+            currentCoroutineContext().ensureActive()
         }
 
-        // set loading and return early if already loading or return cache
+        // Register current job for tracking/cancellation
+        val currentJob = currentCoroutineContext()[Job]
+        if (currentJob != null) {
+            loadingJobs[index] = currentJob
+        }
+
+        // set loading and return early if cache
         chapterMutex.withLock {
-            if (loading.contains(index)) {
-                 if (!reTranslate && !reload) return
-            }
             if (!reload && !reTranslate && chapterData.contains(index)) {
                 return
             }
@@ -850,10 +862,6 @@ class ReadActivityViewModel : ViewModel() {
             chapterData[index] = Resource.Loading(null)
             if (notify) notifyChapterUpdate(index)
         }
-
-        // Save current job
-        val currentJob = currentCoroutineContext()[Job]
-        if (currentJob != null) loadingJobs[index] = currentJob
 
         // we check for out of bounds and if it is out of bounds then try to expand it (Reddit next)
         // we lock it here to prevent duplicate loading when init
@@ -901,35 +909,32 @@ class ReadActivityViewModel : ViewModel() {
 
         // load the data and precalculate everything needed
         try {
-            val dataResource = safeApiCall {
+            val data = safeApiCall {
                 book.getChapterData(index, reload)
-            }
-
-            val data = dataResource.map { text ->
+            }.map { text ->
                 val rawText = preParseHtml(text, authorNotes)
                 // val renderedBuilder = SpannableStringBuilder()
                 // val lengths : IntArray
                 // val nodes : Array<Node>
-
                 // done on raw HTML to preserve styles
-                val translatedHtml = translate(
-                    rawText,
-                    index
-                )
-                { (progressChapter, progressInnerIndex, progressInnerTotal) ->
-                    val progressText =
-                        "${context?.getString(R.string.translating)} ${
-                            book.getChapterTitle(progressChapter)
-                        } ($progressInnerIndex/$progressInnerTotal)"
-                    if (postLoading) {
-                        _loadingStatus.postValue(Resource.Loading(progressText))
-                    } else {
+                val translatedHtml =
+                    translate(rawText, index)
+                    { (progressChapter, progressInnerIndex, progressInnerTotal) ->
+                        val progressText =
+                            "${context?.getString(R.string.translating)} ${
+                                book.getChapterTitle(
+                                    progressChapter
+                                )
+                            } ($progressInnerIndex/$progressInnerTotal)"
+                        if (postLoading) {
+                            _loadingStatus.postValue(Resource.Loading(progressText))
+                        }
                         chapterMutex.withLock {
-                            chapterData[index] = Resource.Loading(progressText)
+                            chapterData[index] =
+                                Resource.Loading(progressText)
                             if (notify) notifyChapterUpdate(index)
                         }
                     }
-                }
 
                 val parsed: Node
                 val rendered: Spanned
@@ -965,27 +970,24 @@ class ReadActivityViewModel : ViewModel() {
             chapterMutex.withLock {
                 chapterData[index] = data
             }
-        } catch (e: CancellationException) {
-            chapterMutex.withLock {
-                if (chapterData[index] is Resource.Loading) {
-                    chapterData.remove(index)
-                }
-                requested.remove(index)
-            }
-            throw e
         } catch (t: Throwable) {
-            requested.remove(index)
-            chapterMutex.withLock {
-                chapterData[index] = throwableToResource(t)
+            val isCancel = t is kotlin.coroutines.cancellation.CancellationException || t.message == "Canceled" || t is java.io.IOException && t.message?.contains("Canceled") == true
+            if (isCancel) {
+                chapterMutex.withLock {
+                    chapterData.remove(index)
+                    requested.remove(index)
+                }
+            } else {
+                chapterMutex.withLock {
+                    chapterData[index] = throwableToResource(t)
+                }
             }
         } finally {
             chapterMutex.withLock {
                 loading -= index
                 if (notify) notifyChapterUpdate(index)
-                if (loadingJobs[index] == currentJob) {
-                    loadingJobs.remove(index)
-                }
             }
+            loadingJobs.remove(index)
         }
     }
 
@@ -1030,11 +1032,13 @@ class ReadActivityViewModel : ViewModel() {
             if (cachedHtml != null) return cachedHtml
 
             // Now TranslationManager handles the splitting and batching!
-            val translatedHtml = translationManager.translate(
-                text = rawHtml,
-                isHtml = true
-            ) { progress, total ->
-                loading.invoke(Triple(chapterIndex, progress, total))
+            val translatedHtml = translationMutex.withLock {
+                translationManager.translate(
+                    text = rawHtml,
+                    isHtml = true
+                ) { progress, total ->
+                    loading.invoke(Triple(chapterIndex, progress, total))
+                }
             }
 
 
@@ -1070,71 +1074,121 @@ class ReadActivityViewModel : ViewModel() {
         reloadMLForAllChapters()
     }
 
+
     private suspend fun reloadMLForAllChapters() {
+        // Cancel all ongoing loading jobs before re-translating everything
+        loadingJobs.values.forEach { it.cancel() }
+        loadingJobs.clear()
+        requested.clear()
+
         _loadingStatus.postValue(Resource.Loading(context?.getString(R.string.translating)))
+
+        val cIndex = currentIndex
+        val lower = cIndex - chapterPaddingBottom
+        val upper = cIndex + chapterPaddingTop
+
+        // 1. Identify all successful chapters in range and hide them immediately
+        val chaptersToTranslate = mutableMapOf<Int, LiveChapterData>()
         chapterMutex.withLock {
-            val cIndex = currentIndex
-            val lower = cIndex - chapterPaddingBottom
-            val upper = cIndex + chapterPaddingTop
-
-            val keys =
-                chapterData.keys.toTypedArray() // deep copy it to avoid ConcurrentModificationException
-
+            for (idx in lower..upper) {
+                val data = chapterData[idx]
+                if (data is Resource.Success) {
+                    chaptersToTranslate[idx] = data.value
+                    // Set to loading immediately to hide old text
+                    chapterData[idx] = Resource.Loading(null)
+                }
+            }
             // remove all irrelevant cache so we do not translate outdated shit
+            val keys = chapterData.keys.toTypedArray()
             for (key in keys) {
                 if (key < lower || key > upper) {
                     chapterData.remove(key)
-                    requested.remove(key)
-                }
-            }
-
-            // update the rem cache
-            for (entry in chapterData.entries) {
-                val value = entry.value
-                if (value !is Resource.Success) continue
-                val success = value.value
-
-                try {
-                    val translatedHtml = translate(
-                        success.rawText,
-                        success.index
-                    ) { (progressChapter, progressInnerIndex, progressInnerTotal) ->
-                        _loadingStatus.postValue(
-                            Resource.Loading(
-                                "${context?.getString(R.string.translating)} ${
-                                    book.getChapterTitle(
-                                        progressChapter
-                                    )
-                                } ($progressInnerIndex/$progressInnerTotal)"
-                            )
-                        )
-                    }
-                    
-                    markwonMutex.withLock {
-                        val parsed = markwon.parse(translatedHtml)
-                        val rendered = markwon.render(parsed)
-                        val spans = parseTextToSpans(rendered, success.index)
-
-                        entry.setValue(
-                            Resource.Success(
-                                success.copy(
-                                    rendered = rendered,
-                                    spans = spans,
-                                )
-                            )
-                        )
-                    }
-                } catch (t: Throwable) {
-                    entry.setValue(
-                        throwableToResource(t)
-                    )
                 }
             }
         }
-
-        // update what we have read
+        // Force UI update to show "Small Loadings" and hide old text
         updateReadArea()
-        //refreshChapters()
+
+        // 2. Prioritize and translate the current chapter first
+        val targetData = chaptersToTranslate[cIndex]
+        if (targetData != null) {
+            translateEntry(targetData, notifyStatus = true)
+            // Once the main chapter is done, we update the UI area to clear Big Loading
+            updateReadArea()
+        }
+
+        // 3. Translate the rest of the range in background sequentially, sorted by distance
+        viewModelScope.launch(Dispatchers.IO) {
+            val remaining = chaptersToTranslate.filterKeys { it != cIndex }
+                .toList()
+                .sortedBy { abs(it.first - cIndex) }
+
+            for ((index, value) in remaining) {
+                translateEntry(value, notifyStatus = false)
+            }
+        }
+    }
+
+    private suspend fun translateEntry(success: LiveChapterData, notifyStatus: Boolean) {
+        try {
+            // Ensure we are in loading state if not already
+            chapterMutex.withLock {
+                if (chapterData[success.index] !is Resource.Loading) {
+                    chapterData[success.index] = Resource.Loading(null)
+                    notifyChapterUpdate(success.index)
+                }
+            }
+
+            val translatedHtml = translate(
+                success.rawText,
+                success.index
+            ) { (progressChapter, progressInnerIndex, progressInnerTotal) ->
+                val progressText = "${context?.getString(R.string.translating)} ${
+                    book.getChapterTitle(progressChapter)
+                } ($progressInnerIndex/$progressInnerTotal)"
+
+                if (notifyStatus) {
+                    _loadingStatus.postValue(Resource.Loading(progressText))
+                }
+
+                chapterMutex.withLock {
+                    chapterData[success.index] = Resource.Loading(progressText)
+                    notifyChapterUpdate(success.index)
+                }
+            }
+
+            val rendered: Spanned
+            val spans: ArrayList<TextSpan>
+
+            markwonMutex.withLock {
+                val parsed = markwon.parse(translatedHtml)
+                rendered = markwon.render(parsed)
+                spans = parseTextToSpans(rendered, success.index)
+
+                val asyncDrawables = rendered.getSpans<AsyncDrawableSpan>()
+                for (async in asyncDrawables) {
+                    async.drawable.result =
+                        book.loadImageBitmap(async.drawable.destination)?.toDrawable(
+                            Resources.getSystem()
+                        )
+                }
+            }
+
+            chapterMutex.withLock {
+                chapterData[success.index] = Resource.Success(
+                    success.copy(
+                        rendered = rendered,
+                        spans = spans,
+                    )
+                )
+                notifyChapterUpdate(success.index)
+            }
+        } catch (t: Throwable) {
+            chapterMutex.withLock {
+                chapterData[success.index] = throwableToResource(t)
+                notifyChapterUpdate(success.index)
+            }
+        }
     }
 
     private suspend fun initMLFromSettings(settings: MLSettings) {
@@ -1212,6 +1266,9 @@ class ReadActivityViewModel : ViewModel() {
                 }
 
                 currentIndex = loadedChapterIndex
+                isSeeking = true
+
+                // load the chapters
                 updateIndexAsync(loadedChapterIndex, notify = false, postLoading = true)
 
                 if (book.size() <= 0) {
@@ -1242,10 +1299,6 @@ class ReadActivityViewModel : ViewModel() {
 
                 // notify once because initial load is 3 chapters I don't care about 10 notifications when the user cant see it
                 updateReadArea(seekToDesired = true)
-
-                /*_loadingStatus.postValue(
-                    Resource.Success(true)
-                )*/
             }
 
             is Resource.Failure -> {
@@ -1631,6 +1684,7 @@ class ReadActivityViewModel : ViewModel() {
     }
 
     fun innerCharToIndex(index: Int, char: Int): Int? {
+        if (char <= 0) return -1
         // the lock is so short it does not matter I *hope*
         return runBlocking {
             chapterMutex.withLock { chapterData[index] }?.letInner { live ->
@@ -1697,25 +1751,31 @@ class ReadActivityViewModel : ViewModel() {
             currentTTSStatus = TTSHelper.TTSStatus.IsStopped
         }
 
-        // set loading
+        // Cancel background tasks and clear local state
+        loadingJobs.values.forEach { it.cancel() }
+        loadingJobs.clear()
+        requested.clear()
+        chapterMutex.withLock { chapterData.clear() }
+
         _loadingStatus.postValue(Resource.Loading())
 
-        // load the chapters
-        updateIndexAsync(index, notify = false, postLoading = true)
+        // Set anchoring state
+        currentIndex = index
+        isSeeking = true
+        desiredIndex = ScrollIndex(index, 0, 0)
+        desiredTTSIndex = ScrollIndex(index, 0, 0)
+
+        // 1. Load target chapter data
+        loadIndividualChapter(index, notify = false, postLoading = true)
+
         // set the keys
         setKey(EPUB_CURRENT_POSITION, book.title(), index)
         setKey(EPUB_CURRENT_POSITION_SCROLL_CHAR, book.title(), 0)
-
-        // set the state
-        desiredIndex = ScrollIndex(index, 0, 0)
-        currentIndex = index
-        desiredTTSIndex = ScrollIndex(index, 0, 0)
 
         // push the update
         updateReadArea(seekToDesired = true)
         // update the view
         _chapterTile.postValue(chaptersTitlesInternal[index])
-        //_loadingStatus.postValue(Resource.Success(true))
     }
 
     /*private fun changeIndex(index: Int, updateArea: Boolean = true) {
@@ -1890,15 +1950,17 @@ class ReadActivityViewModel : ViewModel() {
         mlToLanguageLive
     )
 
-    val mlTranslationAgentLive: MutableLiveData<Int> = MutableLiveData(TranslatorAgent.OFFLINE.ordinal)
+    val mlTranslationAgentLive: MutableLiveData<String> = MutableLiveData(TranslatorAgent.OFFLINE.name)
     var mlTranslationAgent by PreferenceDelegateLiveView(
         "ml_translation_agent",
-        TranslatorAgent.OFFLINE.ordinal,
-        Int::class,
+        TranslatorAgent.OFFLINE.name,
+        String::class,
         mlTranslationAgentLive
     )
-    val currentAgent get() = TranslatorAgent.entries.getOrElse(mlTranslationAgent) { TranslatorAgent.OFFLINE }
-
+    val currentAgent get() = try { TranslatorAgent.valueOf(mlTranslationAgent) } catch (e: Exception) { TranslatorAgent.OFFLINE }
+    //Only translate one chapter at the same time
+    private val translationMutex = Mutex()
+    // private var activeSequenceJob: Job? = null
     data class MLSettings(
         @JsonProperty("from") val from: String,
         @JsonProperty("to") val to: String,

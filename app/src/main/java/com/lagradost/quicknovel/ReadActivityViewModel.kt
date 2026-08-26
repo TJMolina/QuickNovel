@@ -578,13 +578,7 @@ class ReadActivityViewModel : ViewModel() {
     var currentIndex = Int.MIN_VALUE
         private set
 
-    var isSeeking = false
-        private set
 
-    fun stopSeeking() {
-        isSeeking = false
-        updateReadArea()
-    }
 
 
 
@@ -710,6 +704,7 @@ class ReadActivityViewModel : ViewModel() {
         if (current != save.index)
             updateReadArea()
 
+
         // load forwards and backwards
         updateIndex(visibility.firstInMemory.index)
         updateIndex(visibility.lastInMemory.index)
@@ -779,10 +774,8 @@ class ReadActivityViewModel : ViewModel() {
         val chapters = ArrayList<SpanDisplay>()
         val canReload = this.book.canReload
 
-        fun addChapter(idx: Int, forceHiding: Boolean) {
+        fun addChapter(idx: Int) {
             if (idx < 0 || idx >= book.size()) return
-            // Stealth Padding: Hide loading chapters above us while seeking to ensure stable anchoring
-            if (forceHiding && isSeeking && chapterData[idx] !is Resource.Success) return
 
             chaptersTitlesInternal.getOrNull(idx)?.let { text ->
                 chapters.add(ChapterStartSpanned(idx, 0, text, canReload))
@@ -793,19 +786,19 @@ class ReadActivityViewModel : ViewModel() {
         when (readerType) {
             ReadingType.DEFAULT, ReadingType.INF_SCROLL -> {
                 for (idx in cIndex - chapterPaddingBottom..cIndex + chapterPaddingTop) {
-                    addChapter(idx, forceHiding = idx < cIndex)
+                    addChapter(idx)
                 }
             }
 
             ReadingType.BTT_SCROLL -> {
                 chapterIdxToSpanDisplayNextButton(cIndex - 1, cIndex)?.let { chapters.add(it) }
-                addChapter(cIndex, forceHiding = false)
+                addChapter(cIndex)
                 chapterIdxToSpanDisplayNextButton(cIndex + 1, cIndex)?.let { chapters.add(it) }
             }
 
             ReadingType.OVERSCROLL_SCROLL -> {
                 chapterIdxToSpanDisplayOverscrollButton(cIndex - 1, cIndex)?.let { chapters.add(it) }
-                addChapter(cIndex, forceHiding = false)
+                addChapter(cIndex)
                 chapterIdxToSpanDisplayOverscrollButton(cIndex + 1, cIndex)?.let { chapters.add(it) }
             }
         }
@@ -1112,9 +1105,10 @@ class ReadActivityViewModel : ViewModel() {
         // 2. Prioritize and translate the current chapter first
         val targetData = chaptersToTranslate[cIndex]
         if (targetData != null) {
-            translateEntry(targetData, notifyStatus = true)
-            // Once the main chapter is done, we update the UI area to clear Big Loading
-            updateReadArea()
+            // Silence internal chapter updates to avoid premature/reset scroll
+            translateEntry(targetData, notifyStatus = true, notifyChapter = false)
+            // Once the main chapter is done, we update the UI area and FORCE SEEK (SCROLL FIX)
+            updateReadArea(seekToDesired = true)
         }
 
         // 3. Translate the rest of the range in background sequentially, sorted by distance
@@ -1129,13 +1123,17 @@ class ReadActivityViewModel : ViewModel() {
         }
     }
 
-    private suspend fun translateEntry(success: LiveChapterData, notifyStatus: Boolean) {
+    private suspend fun translateEntry(
+        success: LiveChapterData,
+        notifyStatus: Boolean,
+        notifyChapter: Boolean = true
+    ) {
         try {
             // Ensure we are in loading state if not already
             chapterMutex.withLock {
                 if (chapterData[success.index] !is Resource.Loading) {
                     chapterData[success.index] = Resource.Loading(null)
-                    notifyChapterUpdate(success.index)
+                    if (notifyChapter) notifyChapterUpdate(success.index)
                 }
             }
 
@@ -1153,7 +1151,7 @@ class ReadActivityViewModel : ViewModel() {
 
                 chapterMutex.withLock {
                     chapterData[success.index] = Resource.Loading(progressText)
-                    notifyChapterUpdate(success.index)
+                    if (notifyChapter) notifyChapterUpdate(success.index)
                 }
             }
 
@@ -1181,12 +1179,12 @@ class ReadActivityViewModel : ViewModel() {
                         spans = spans,
                     )
                 )
-                notifyChapterUpdate(success.index)
+                if (notifyChapter) notifyChapterUpdate(success.index)
             }
         } catch (t: Throwable) {
             chapterMutex.withLock {
                 chapterData[success.index] = throwableToResource(t)
-                notifyChapterUpdate(success.index)
+                if (notifyChapter) notifyChapterUpdate(success.index)
             }
         }
     }
@@ -1266,10 +1264,10 @@ class ReadActivityViewModel : ViewModel() {
                 }
 
                 currentIndex = loadedChapterIndex
-                isSeeking = true
+                requested += loadedChapterIndex
 
                 // load the chapters
-                updateIndexAsync(loadedChapterIndex, notify = false, postLoading = true)
+                loadIndividualChapter(loadedChapterIndex, notify = false, postLoading = true)
 
                 if (book.size() <= 0) {
                     _loadingStatus.postValue(
@@ -1284,7 +1282,7 @@ class ReadActivityViewModel : ViewModel() {
                 // if we are reading a book that sub/resize for some reason, this will clamp it into the correct range
                 if (loadedChapterIndex >= book.size()) {
                     currentIndex = book.size() - 1
-                    updateIndexAsync(currentIndex, notify = false)
+                    loadIndividualChapter(currentIndex, notify = false)
                     showToast("Resize $loadedChapterIndex -> $currentIndex", Toast.LENGTH_LONG)
                 }
 
@@ -1761,7 +1759,6 @@ class ReadActivityViewModel : ViewModel() {
 
         // Set anchoring state
         currentIndex = index
-        isSeeking = true
         desiredIndex = ScrollIndex(index, 0, 0)
         desiredTTSIndex = ScrollIndex(index, 0, 0)
 
@@ -1789,7 +1786,6 @@ class ReadActivityViewModel : ViewModel() {
 
 
 
-    // FUCK ANDROID WITH ALL MY HEART
     // SEE https://stackoverflow.com/questions/45960265/android-o-oreo-8-and-higher-media-buttons-issue WHY
     private fun playDummySound() {
         val act = activity ?: return

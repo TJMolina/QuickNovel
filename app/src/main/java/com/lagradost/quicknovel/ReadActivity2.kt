@@ -392,49 +392,36 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         postLines(getAllLines())
     }
 
-    private var cachedChapter: List<SpanDisplay> = emptyList()
     private fun scrollToDesired() {
         val desired: ScrollIndex = viewModel.desiredIndex ?: return
-        val adapterPosition =
-            cachedChapter.indexOfFirst { display -> display.index == desired.index && display.innerIndex == desired.innerIndex }
-        if (adapterPosition == -1) return
+        val recyclerView = binding.realText
+        val adapterList = textAdapter.immutableCurrentList
 
-        //val offset = 7.toPx
-        textLayoutManager.scrollToPositionWithOffset(adapterPosition, 1)
-
-        // don't inner-seek if zero because that is chapter break
-        if (desired.innerIndex == 0) {
-            binding.realText.post {
-                viewModel.stopSeeking()
-                onScroll()
-            }
-            return
+        var adapterPosition = if (desired.innerIndex <= 0) {
+            adapterList.indexOfFirst { it.index == desired.index }
+        } else {
+            adapterList.indexOfFirst { it.index == desired.index && it.innerIndex == desired.innerIndex }
         }
 
-        binding.realText.post {
-            getAllLines().also { postLines(it) }.firstOrNull { line ->
-                line.index == desired.index && line.endChar >= desired.char
-            }?.let { line ->
-                //binding.tmpTtsStart2.fixLine(line.top)
-                //binding.tmpTtsEnd2.fixLine(line.bottom)
-                binding.realText.scrollBy(0, line.top - getTopY())
-            }
-            viewModel.stopSeeking()
-            onScroll()
-        }
-
-        /*desired.firstVisibleChar?.let { visible ->
-                binding.realText.post {
-                    binding.realText.scrollBy(
-                        0,
-                        (textAdapter.getViewOffset(
-                            transformIndexToScrollVisibilityItem(adapterPosition),
-                            visible
-                        ) ?: 0) + offset
-                    )
+        if (adapterPosition != -1) {
+            textLayoutManager.scrollToPositionWithOffset(adapterPosition, 0)
+            
+            recyclerView.post {
+                if (desired.innerIndex > 0) {
+                    getAllLines().also { postLines(it) }.firstOrNull { line ->
+                        line.index == desired.index && line.endChar >= desired.char
+                    }?.let { line ->
+                        recyclerView.scrollBy(0, line.top - getTopY())
+                    }
                 }
-            }*/
-
+                
+                onScroll()
+                viewModel._loadingStatus.postValue(Resource.Success(true))
+            }
+        } else {
+            onScroll()
+            viewModel._loadingStatus.postValue(Resource.Success(true))
+        }
     }
 
     private fun View.fixLine(offset: Int) {
@@ -489,7 +476,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
             // scroll to the top of that line, first search the adapter
             val adapterPosition =
-                cachedChapter.indexOfFirst { display -> display.index == line.index && display.innerIndex == innerIndex }
+                textAdapter.immutableCurrentList.indexOfFirst { display -> display.index == line.index && display.innerIndex == innerIndex }
 
             // if we tts out of bounds somehow? we scroll to that and refresh everything
             if (adapterPosition == -1) {
@@ -962,27 +949,13 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             }
         }
 
-        var last: Resource<Boolean> = Resource.Loading() // very dirty
         observe(viewModel.loadingStatus) { loading ->
-            val different = last != loading
-            last = loading
             when (loading) {
                 is Resource.Success -> {
                     binding.readLoading.isVisible = false
                     binding.readFail.isVisible = false
-
                     binding.readNormalLayout.isVisible = true
-
-                    if (different) {
-                        binding.readNormalLayout.alpha = 0.01f
-
-                        ObjectAnimator.ofFloat(binding.readNormalLayout, "alpha", 1f).apply {
-                            duration = 300
-                            start()
-                        }
-                    } else {
-                        binding.readNormalLayout.alpha = 1.0f
-                    }
+                    binding.readNormalLayout.alpha = 1.0f
                 }
 
                 is Resource.Loading -> {
@@ -1053,8 +1026,6 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 RecyclerView.OnScrollListener() {
                 var updateFromCode = false
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                    if (viewModel.isSeeking) return
-
                     if (dy != 0 && !updateFromCode) {
                         var rdy = dy
 
@@ -1103,15 +1074,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         //here inserted novel chapter text into recyclerview
         observe(viewModel.chapter) { chapter ->
-            cachedChapter = chapter.data
-
             if (chapter.seekToDesired) {
                 textAdapter.submitIncomparableList(chapter.data) {
-                    if (chapter.isTargetChapterReady) {
-                        viewModel._loadingStatus.postValue(Resource.Success(true))
-                    }
                     scrollToDesired()
-                    onScroll()
                 }
             } else {
                 textAdapter.submitList(chapter.data) {

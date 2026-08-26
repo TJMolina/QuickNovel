@@ -80,8 +80,10 @@ import kotlin.math.roundToInt
 import kotlin.properties.Delegates
 import com.google.android.material.tabs.TabLayout
 import com.lagradost.quicknovel.ReadActivityViewModel.MLSettings.Companion.AUTO_LANG
+import com.lagradost.quicknovel.util.SubtitleHelper
 import com.lagradost.quicknovel.util.UIHelper.fixSystemBarsPadding
-import com.lagradost.quicknovel.util.translation.models.TranslatorAgent
+import com.lagradost.quicknovel.util.translation.models.TranslatorAgents
+import kotlin.collections.map
 
 class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     companion object {
@@ -1048,6 +1050,16 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                         } else if (currentOverScroll > 0.0f && rdy > 0) {
                             rdy = 0
                         }
+                        /*println("currentOverScrollTranslation=$currentOverScrollTranslation rdy=$rdy")
+                        val dscroll = minOf(currentOverScrollTranslation.absoluteValue.toInt(), rdy.absoluteValue)
+                        if(currentOverScrollTranslation < 0 && rdy < 0) {
+                            currentOverScrollTranslation += dscroll
+                            rdy += dscroll
+                        }
+                        if(currentOverScrollTranslation > 0 && rdy > 0) {
+                            currentOverScrollTranslation -= dscroll
+                            rdy -= dscroll
+                        }*/
 
                         currentScroll += dy
                         val delta = rdy - dy
@@ -1057,8 +1069,14 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                         }
                     } else {
                         updateFromCode = false
+                        onScroll()
                     }
-                    onScroll()
+
+                    super.onScrolled(recyclerView, dx, dy)
+
+                    // binding.tmpTtsEnd.fixLine((getBottomY()- remainingBottom) + 7.toPx)
+                    // binding.tmpTtsStart.fixLine(remainingTop + 7.toPx)
+
                 }
 
                 //this is to reduce onScroll calls
@@ -1076,11 +1094,13 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         observe(viewModel.chapter) { chapter ->
             if (chapter.seekToDesired) {
                 textAdapter.submitIncomparableList(chapter.data) {
+                    viewModel._loadingStatus.postValue(Resource.Success(true))
                     scrollToDesired()
+                    onScroll()
                 }
             } else {
                 textAdapter.submitList(chapter.data) {
-                    if (chapter.isTargetChapterReady) {
+                    if (viewModel.loadingStatus.value !is Resource.Loading) {
                         viewModel._loadingStatus.postValue(Resource.Success(true))
                     }
                     onScroll()
@@ -1289,11 +1309,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 val items = ReadActivityViewModel.MLSettings.mapList
 
                 context.showDialog(
-                    items.map {
-                        it.second
+                    items.map { (key,value) ->
+                        "${SubtitleHelper.getFlagFromIso(key)} $value"
                     },
                     items.map { it.first }.indexOf(viewModel.mlToLanguage),
-                    context.getString(R.string.sleep_timer), false, {}
+                    context.getString(R.string.translate_to), false, {}
                 ) { index ->
                     viewModel.mlToLanguage = items[index].first
                     binding.readMlTo.text =
@@ -1301,13 +1321,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 }
             }
 
-            binding.readOnlineTranslationSwitch.isChecked = viewModel.currentAgent != TranslatorAgent.OFFLINE
+            binding.readOnlineTranslationSwitch.isChecked = viewModel.currentAgent != TranslatorAgents.OFFLINE
             binding.readOnlineTranslationSwitch.setOnCheckedChangeListener { _, isChecked ->
-                viewModel.mlTranslationAgent = if (isChecked) {
-                    TranslatorAgent.ONLINE.name
-                } else {
-                    TranslatorAgent.OFFLINE.name
-                }
+                viewModel.mlTranslationAgent = if (isChecked) TranslatorAgents.ONLINE.name
+                else TranslatorAgents.OFFLINE.name
+
                 //Do not allow automatic detection of the target language; the user should know that themselves (they should know the name of their own language).
                 //It could probably be automated, but I have no idea.
                 if (isChecked == false && viewModel.mlFromLanguage == AUTO_LANG) {
@@ -1320,7 +1338,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 if (view == null) return@setOnClickListener
                 val context = view.context
 
-                val items = if (viewModel.currentAgent != TranslatorAgent.OFFLINE) {
+                val items = if (viewModel.currentAgent != TranslatorAgents.OFFLINE) {
                     ReadActivityViewModel.MLSettings.mapOnlineList
                 } else {
                     ReadActivityViewModel.MLSettings.mapList
@@ -1328,9 +1346,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
 
                 context.showDialog(
-                    items.map { it.second },
-                    items.map { it.first }.indexOf(viewModel.mlFromLanguage),
-                    context.getString(R.string.sleep_timer), false, {}
+                    items.map { (key,value) ->
+                        "${SubtitleHelper.getFlagFromIso(key)} $value"
+                    },
+                    items.map { item -> item.first }.indexOf(viewModel.mlFromLanguage),
+                    context.getString(R.string.translate_from), false, {}
                 ) { index ->
                     viewModel.mlFromLanguage = items[index].first
                     binding.readMlFrom.text =
@@ -1342,8 +1362,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 if (view == null) return@setOnClickListener
                 ioSafe {
                     try {
-                        val needsDownload = viewModel.requireMLDownload()
-                        if (!needsDownload) {
+                        if (!viewModel.requireMLDownload()) {
                             viewModel.applyMLSettings()
                             runOnUiThread { bottomSheetDialog.dismiss() }
                         } else {
@@ -1371,15 +1390,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 ReadActivityViewModel.MLSettings.fromShortToDisplay(viewModel.mlFromLanguage)
 
             val mlSettings = viewModel.mlSettings
-
-            val agentName = when(mlSettings.agent) {
-                TranslatorAgent.GEMINI -> "Gemini AI"
-                TranslatorAgent.ONLINE -> "Google Online"
-                else -> getString(R.string.google_translate)
-            }
-
-           binding.readMlTitle.text =
-                    "$agentName (${mlSettings.fromDisplay} -> ${mlSettings.toDisplay})"
+            binding.readMlTitle.text =
+                "Google Online (${mlSettings.fromDisplay} -> ${mlSettings.toDisplay})"
 
             binding.readLanguage.setOnClickListener { _ ->
                 ioSafe {

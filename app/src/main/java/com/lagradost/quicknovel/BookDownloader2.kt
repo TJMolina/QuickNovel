@@ -72,6 +72,8 @@ import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.pmap
 import com.lagradost.quicknovel.util.updates.data.UpdatesManager
+import com.lagradost.quicknovel.util.updates.data.UpdatesManager.addToWatchList
+import com.lagradost.quicknovel.util.updates.data.UpdatesManager.removeFromWatchList
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPage
@@ -1464,14 +1466,11 @@ object BookDownloader2 {
                     return@withPermit null
 
                 val newCached = cached.copy(
-                    totalChapters = totalChapters
+                    totalChapters = totalChapters,
+                    lastTotalChapters = cached.lastTotalChapters ?: cached.totalChapters
                 )
 
-                setKey(
-                    RESULT_BOOKMARK,
-                    cached.id.toString(),
-                    newCached
-                )
+                UpdatesManager.saveEntry(newCached)
 
                 bookmarkChanged(cached.id)
 
@@ -1694,6 +1693,9 @@ object BookDownloader2 {
 
         setKey(DOWNLOAD_EPUB_LAST_ACCESS, toId, getKey<Long>(DOWNLOAD_EPUB_LAST_ACCESS, fromId))
         removeKey(DOWNLOAD_EPUB_LAST_ACCESS, fromId)
+
+        setKey(NOVEL_WATCH_FOLDER, toId, true)
+        removeKey(NOVEL_WATCH_FOLDER, fromId)
 
         if (oldName != newName) {
             setKey(EPUB_CURRENT_POSITION, newName, getKey<Int>(EPUB_CURRENT_POSITION, oldName))

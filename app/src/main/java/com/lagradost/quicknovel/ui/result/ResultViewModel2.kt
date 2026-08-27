@@ -27,7 +27,6 @@ import com.lagradost.quicknovel.DownloadProgressState
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION_CHAPTER
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION_SCROLL_CHAR
-import com.lagradost.quicknovel.HISTORY_FOLDER
 import com.lagradost.quicknovel.QuickStreamData
 import com.lagradost.quicknovel.QuickStreamMetaData
 import com.lagradost.quicknovel.R
@@ -347,6 +346,7 @@ class ResultViewModel2(
 
         if (!isPreview && bookId != null) {
             ImmutableSearchResponse.setTimeOfPageOpened(bookId, System.currentTimeMillis())
+            UpdatesManager.markAsSeen(bookId)
             BookDownloader2.openChanged(bookId)
         }
 

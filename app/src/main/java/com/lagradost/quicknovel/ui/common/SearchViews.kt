@@ -523,23 +523,22 @@ fun SearchResponseItem(
 
             if (response.id != null) {
                 Row(modifier = Modifier.padding(5.dp)) {
-                    if (response.downloadState == null) {
-                        val chapters = response.chapters
-                        if (chapters != null && chapters > 0) {
-                            Box(
-                                modifier = Modifier
-                                    .rounded()
-                                    .background(Color.Black.copy(alpha = 0.6f))
-                                    .padding(4.dp)
-                            ) {
-                                Text(
-                                    text = "${response.chaptersRead}/$chapters",
-                                    color = Color.White,
-                                    fontSize = 12.sp, lineHeight = 12.sp
-                                )
-                            }
+                    val chapters = response.chapters
+                    if (chapters != null && chapters > 0) {
+                        Box(
+                            modifier = Modifier
+                                .rounded()
+                                .background(Color.Black.copy(alpha = 0.6f))
+                                .padding(4.dp)
+                        ) {
+                            Text(
+                                text = "${response.chaptersRead}/$chapters",
+                                color = Color.White,
+                                fontSize = 12.sp, lineHeight = 12.sp
+                            )
                         }
-                    } else if (response.hasNewChapters) {
+                    }
+                    if (response.hasNewChapters) {
                         NewChaptersChip(
                             number = response.newChaptersCount.toInt(),
                             isGrid = true

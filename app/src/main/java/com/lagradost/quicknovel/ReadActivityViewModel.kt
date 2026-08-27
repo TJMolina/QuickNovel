@@ -1045,12 +1045,14 @@ class ReadActivityViewModel : ViewModel() {
 
 
             // Write to cache
-            safe {
-                context?.cacheDir?.let {
-                    val cache = File(it, "$filePrefix.tmp")
-                    cache.writeText(translatedHtml)
-                    safe { File(it, "$filePrefix.txt").delete() }
-                    cache.renameTo(File(it, "$filePrefix.txt"))
+            if (translatedHtml.isNotBlank() && translatedHtml != rawHtml) {
+                safe {
+                    context?.cacheDir?.let {
+                        val cache = File(it, "$filePrefix.tmp")
+                        cache.writeText(translatedHtml)
+                        safe { File(it, "$filePrefix.txt").delete() }
+                        cache.renameTo(File(it, "$filePrefix.txt"))
+                    }
                 }
             }
 

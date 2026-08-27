@@ -457,6 +457,8 @@ fun ResultScreenImpl(
                 contentDescription = stringResource(R.string.poster_descript),
             )
         }
+
+        FloatingStreamRead(response, action)
     }
 
     if (state.dialogState?.isBookmarkSelectionOpen == true) {

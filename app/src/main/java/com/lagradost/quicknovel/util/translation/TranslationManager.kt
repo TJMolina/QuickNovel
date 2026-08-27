@@ -11,7 +11,7 @@ import com.google.mlkit.nl.translate.TranslatorOptions
 import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.MainActivity
 import com.lagradost.quicknovel.mvvm.logError
-import com.lagradost.quicknovel.util.translation.models.TranslatorAgent
+import com.lagradost.quicknovel.util.translation.models.TranslatorAgents
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
@@ -35,24 +35,17 @@ class TranslationManager {
     private var translator: Translator? = null // MLKit Offline
     private var currentFrom: String? = null
     private var currentTo: String? = null
-    private var currentAgent: TranslatorAgent = TranslatorAgent.OFFLINE
+    private var currentAgent: TranslatorAgents = TranslatorAgents.OFFLINE
 
     /**
      * Configura los idiomas y el agente activo.
      */
-    fun setSettings(from: String, to: String, agent: TranslatorAgent) {
+    fun setSettings(from: String, to: String, agent: TranslatorAgents) {
         if (currentFrom == from && currentTo == to && currentAgent == agent) return
 
         currentFrom = from
         currentTo = to
         currentAgent = agent
-
-        if (agent == TranslatorAgent.GEMINI) {
-        }
-
-        if (agent != TranslatorAgent.OFFLINE) {
-            releaseOffline()
-        }
     }
 
     suspend fun isModelDownloaded(source: String, target: String): Boolean = withContext(Dispatchers.IO) {
@@ -142,16 +135,16 @@ class TranslationManager {
         val to = currentTo ?: throw Exception("Target language not set")
 
         return when (currentAgent) {
-            TranslatorAgent.ONLINE -> {
+            TranslatorAgents.ONLINE -> {
                 val result = onlineTranslator.translate(textList, from, to, isHtml, progress)
                 onlineTranslator.fixFailures(result, from, to, isHtml = isHtml)
             }
 
-            TranslatorAgent.OFFLINE -> {
+            TranslatorAgents.OFFLINE -> {
                 offlineTranslate(textList, from, to, isHtml, progress)
             }
 
-            TranslatorAgent.GEMINI -> {
+            TranslatorAgents.GEMINI -> {
                 val result = geminiTranslator.translate(textList, from, to, isHtml, progress)
                 onlineTranslator.fixFailures(result, from, to, isHtml = isHtml)
             }

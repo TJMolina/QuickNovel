@@ -188,7 +188,7 @@ class GoogleTranslateOnline(
                 if (t is UnknownHostException) throw t
                 retryNumber++
                 if (retryNumber >= maxRetry) throw t
-                delay(500L * (2.0.pow(retryNumber).toLong()))
+                delay(1000L * (2.0.pow(retryNumber).toLong()))
             }
         }
         return text

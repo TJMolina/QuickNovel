@@ -183,24 +183,20 @@ class GoogleTranslateOnline(
         val maxRetry = 3
         while (retryNumber < maxRetry) {
             try {
-                // Add a small jitter delay between requests to avoid rapid-fire detection
-                if (retryNumber == 0) {
-                    delay((200..600).random().toLong())
-                }
+                if (retryNumber == 0) delay((200..600).random().toLong().milliseconds)
 
                 val response = callGoogleTranslateApi(text, from, to)
                 val sentences = response.sentences
                 if (sentences.isEmpty()) return text
-                
+
                 return sentences.joinToString("") { it.trans }
             } catch (t: Throwable) {
                 logError(t)
                 if (t is UnknownHostException) throw t
 
-                if (t.message?.contains("Rate Limit", true) == true) {
+                if (t.message?.contains("Rate Limit", true) == true)
                     delay((2000L * (retryNumber + 1)).milliseconds)
-                }
-                
+
                 retryNumber++
                 if (retryNumber >= maxRetry) throw t
                 delay((1000L * (2.0.pow(retryNumber).toLong()) + (0..1000).random()).milliseconds)

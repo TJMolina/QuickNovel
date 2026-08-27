@@ -82,6 +82,7 @@ import com.google.android.material.tabs.TabLayout
 import com.lagradost.quicknovel.ReadActivityViewModel.MLSettings.Companion.AUTO_LANG
 import com.lagradost.quicknovel.util.SubtitleHelper
 import com.lagradost.quicknovel.util.UIHelper.fixSystemBarsPadding
+import kotlin.collections.map
 import com.lagradost.quicknovel.util.translation.models.TranslatorAgents
 import kotlin.collections.map
 
@@ -407,7 +408,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
         if (adapterPosition != -1) {
             textLayoutManager.scrollToPositionWithOffset(adapterPosition, 0)
-            
+
             recyclerView.post {
                 if (desired.innerIndex > 0) {
                     getAllLines().also { postLines(it) }.firstOrNull { line ->
@@ -416,7 +417,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                         recyclerView.scrollBy(0, line.top - getTopY())
                     }
                 }
-                
+
                 onScroll()
                 viewModel._loadingStatus.postValue(Resource.Success(true))
             }
@@ -1347,7 +1348,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
                 context.showDialog(
                     items.map { (key,value) ->
-                        "${SubtitleHelper.getFlagFromIso(key)} $value"
+                       "${SubtitleHelper.getFlagFromIso(key)} $value"
                     },
                     items.map { item -> item.first }.indexOf(viewModel.mlFromLanguage),
                     context.getString(R.string.translate_from), false, {}

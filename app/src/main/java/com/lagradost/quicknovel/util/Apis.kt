@@ -30,7 +30,6 @@ import com.lagradost.quicknovel.providers.LnoriProvider
 import com.lagradost.quicknovel.providers.KolNovelProvider
 import com.lagradost.quicknovel.providers.LibReadProvider
 import com.lagradost.quicknovel.providers.LightNovelTranslationsProvider
-import com.lagradost.quicknovel.providers.LightNovelWorldProvider
 import com.lagradost.quicknovel.providers.LnMTLProvider
 import com.lagradost.quicknovel.providers.LuxonScansProvider
 import com.lagradost.quicknovel.providers.MeioNovelProvider
@@ -103,7 +102,7 @@ class Apis {
             LibReadProvider(),
             //LightNovelPubProvider(), // Got cloudflare, but probably bypassable
             LightNovelTranslationsProvider(),
-            LightNovelWorldProvider(),
+           // LightNovelWorldProvider(), // Replaced with chikari.moe
             LnoriProvider(),
             LnMTLProvider(),
             LuxonScansProvider(),

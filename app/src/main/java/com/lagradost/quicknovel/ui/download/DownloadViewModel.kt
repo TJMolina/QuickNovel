@@ -122,7 +122,9 @@ class DownloadViewModel : ViewModel() {
     }
 
     fun load(card: ResultCached) {
-        loadResult(card.source, card.apiName)
+        if(!card.isImported) {
+            loadResult(card.source, card.apiName)
+        }
     }
 
     fun stream(card: ResultCached) {
@@ -219,7 +221,9 @@ class DownloadViewModel : ViewModel() {
     }
 
     fun load(card: DownloadFragment.DownloadDataLoaded) {
-        loadResult(card.source, card.apiName)
+        if(!card.isImported) {
+            loadResult(card.source, card.apiName)
+        }
     }
 
     fun deleteAlert(card: ResultCached) {

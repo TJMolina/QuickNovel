@@ -70,6 +70,7 @@ import com.lagradost.quicknovel.util.CoilImagesPlugin.CoilStore
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.Coroutines.runOnMainThread
 import com.lagradost.quicknovel.util.SubtitleHelper
+import com.lagradost.quicknovel.util.translation.GoogleTranslateOnline
 import com.lagradost.quicknovel.util.translation.TranslationManager
 import com.lagradost.quicknovel.util.translation.models.TranslatorAgents
 import io.noties.markwon.AbstractMarkwonPlugin

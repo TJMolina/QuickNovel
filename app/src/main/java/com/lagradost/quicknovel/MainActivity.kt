@@ -1,9 +1,11 @@
 package com.lagradost.quicknovel
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -129,6 +131,10 @@ class MainActivity : AppCompatActivity() {
 
         const val EXTRA_URL = "extra_url"
         const val EXTRA_API_NAME = "extra_api_name"
+
+        fun importEpubs() {
+            mainActivity?.openEpubPickers()
+        }
 
         var app = Requests(
             OkHttpClient()
@@ -371,47 +377,46 @@ class MainActivity : AppCompatActivity() {
             false
         }
     }
+
     private val mainViewModel: ResultViewModel2 by viewModels()
+    fun importUri(uri: Uri) = safe {
+        val ctx: Context = this
+
+        safe {
+            ctx.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+
+        val file = StorageFile.from(ctx, uri)
+        val fileName = file?.name
+        val mimeType = file?.mimeType //ctx.contentResolver.getType(uri)
+        println("Loaded epub file. Selected URI path: $uri - Name: $fileName with type $mimeType")
+
+        ioSafe {
+            try {
+                if (mimeType == "application/pdf" || fileName?.endsWith(".pdf") == true) {
+                    BookDownloader2.downloadPDFWorkThread(uri, ctx)
+                } else {
+                    BookDownloader2.downloadWorkThread(uri, ctx)
+                }
+            } catch (t: Throwable) {
+                logError(t)
+                showToast(t.message)
+            }
+        }
+    }
     //imports area -------------------------------
     private val epubPathPicker =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            safe {
-                // It lies, it can be null if file manager quits.
-                if (uri == null) return@safe
-                val ctx = this
-
-                // RW perms for the path
-                try {
-                    ctx.contentResolver.takePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                    )
-                } catch (t: Throwable) {
-                    logError(t)
-                }
-
-                val file = StorageFile.from(ctx, uri)
-                val fileName = file?.name
-                val mimeType = file?.mimeType //ctx.contentResolver.getType(uri)
-                println("Loaded epub file. Selected URI path: $uri - Name: $fileName with type $mimeType")
-
-                ioSafe {
-                    try {
-                        if (mimeType == "application/pdf" || fileName?.endsWith(".pdf") == true) {
-                            BookDownloader2.downloadPDFWorkThread(uri, ctx)
-                        } else {
-                            BookDownloader2.downloadWorkThread(uri, ctx)
-                        }
-                    } catch (t: Throwable) {
-                        logError(t)
-                        showToast(t.message)
-                    }
-                }
-            }
+            // It lies, it can be null if file manager quits.
+            if (uri == null) return@registerForActivityResult
+            importUri(uri)
         }
 
     private fun openEpubPicker() {
-        try {
+        safe {
             epubPathPicker.launch(
                 arrayOf(
                     //"text/plain",
@@ -421,11 +426,21 @@ class MainActivity : AppCompatActivity() {
                     "application/epub+zip",
                 )
             )
-        } catch (e: Exception) {
-            logError(e)
         }
     }
-
+    private fun openEpubPickers() {
+        safe {
+            epubPathPicker.launch(
+                arrayOf(
+                    //"text/plain",
+                    //"text/str",
+                    //"application/octet-stream",
+                    "application/pdf",
+                    "application/epub+zip",
+                )
+            )
+        }
+    }
     /* // MOON READER WONT RETURN THE DURATION, BUT THIS CAN BE USED FOR SOME USER FEEDBACK IN THE FUTURE??? SEE @moonreader
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -690,35 +705,21 @@ class MainActivity : AppCompatActivity() {
                         downloadDeleteTrashFromResult.setOnClickListener {
                             viewModel.deleteAlert()
                         }
-                            //show bottom dialog with libraries
-                            bookmark.setOnClickListener { view ->
-                                val context = view.context ?: return@setOnClickListener
-                                val libraries = context.getBookmarks()
-                                val allOptions = mutableListOf(DefaultBookmark(-1, "", context.getString(R.string.type_none), false, -1))
-                                allOptions.addAll(libraries)
 
-                                val currentLibraryId = viewModel.libraryId.value ?: 0
-                                val selectedIndex = if (currentLibraryId == 0) 0 else libraries.indexOfFirst { it.id == currentLibraryId } + 1
-
-                                /*
-                                LibraryManager.showLibraryBottomDialog(
-                                    context,
-                                    allOptions,
-                                    selectedIndex = selectedIndex,
-                                    BookDownloader2.updatePagesDetails,
-                                    context.getString(R.string.bookmark)
-                                ) { selected ->
-                                    if (selected == 0) {
-                                        viewModel.bookmark(0)
-                                    } else {
-                                        val selectedLibrary = libraries.getOrNull(selected - 1) ?: return@showLibraryBottomDialog
-                                        viewModel.bookmark(selectedLibrary.id)
-                                    }
-                                }*/
+                        bookmark.setOnClickListener { view ->
+                            view.popupMenu(
+                                ReadType.entries.map { it.prefValue to it.stringRes },
+                                selectedItemId = viewModel.readState.value?.prefValue
+                            ) {
+                                viewModel.bookmark(itemId)
                             }
-                            readMore.setOnClickListener {
-                            loadResult(d.url, viewModel.apiName)
-                            hidePreviewPopupDialog()
+                        }
+
+                        readMore.setOnClickListener {
+                            if(!d.isImported) {
+                                loadResult(d.url, viewModel.apiName)
+                                hidePreviewPopupDialog()
+                            }
                         }
 
                         readMore.isVisible =
@@ -732,16 +733,20 @@ class MainActivity : AppCompatActivity() {
                         resultviewPreviewPoster.apply {
                             setImage(d.downloadImage())
                             setOnClickListener {
-                                loadResult(d.url, viewModel.apiName)
-                                hidePreviewPopupDialog()
+                                if(!d.isImported) {
+                                    loadResult(d.url, viewModel.apiName)
+                                    hidePreviewPopupDialog()
+                                }
                             }
                         }
 
                         resultviewPreviewTitle.text = d.name
 
                         resultviewPreviewMoreInfo.setOnClickListener {
-                            loadResult(d.url, viewModel.apiName)
-                            hidePreviewPopupDialog()
+                            if(!d.isImported) {
+                                loadResult(d.url, viewModel.apiName)
+                                hidePreviewPopupDialog()
+                            }
                         }
 
                         resultviewPreviewDescription.text =

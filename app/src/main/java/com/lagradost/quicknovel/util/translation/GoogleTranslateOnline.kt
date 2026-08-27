@@ -2,6 +2,7 @@ package com.lagradost.quicknovel.util.translation
 
 import android.net.Uri
 import com.lagradost.nicehttp.Requests
+import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.util.translation.models.FailedContext
 import com.lagradost.quicknovel.util.translation.models.GoogleTranslationResponse
@@ -10,6 +11,7 @@ import com.lagradost.quicknovel.util.translation.models.TranslationResult
 import kotlinx.coroutines.delay
 import java.net.UnknownHostException
 import kotlin.math.pow
+import kotlin.time.Duration.Companion.milliseconds
 
 class GoogleTranslateOnline(
     private val client: Requests
@@ -165,9 +167,12 @@ class GoogleTranslateOnline(
         return TranslationResult(allTranslatedLines.toList(), failedParagraphs)
     }
 
-    private suspend fun callGoogleTranslateApi(text: String, from: String, to: String) =
-        client.get("$BASEURL$from&tl=$to&dt=t&q=${Uri.encode(text)}")
-            .parsed<GoogleTranslationResponse>()
+    private suspend fun callGoogleTranslateApi(text: String, from: String, to: String): GoogleTranslationResponse {
+        val res = client.get("$BASEURL$from&tl=$to&dt=t&q=${Uri.encode(text)}")
+        if (res.code == 429) throw ErrorLoadingException("Google Translate Rate Limit Hit")
+        if (!res.isSuccessful) throw ErrorLoadingException("Google Translate Error: ${res.code}")
+        return res.parsed()
+    }
 
     private suspend fun translateChunk(
         text: String,
@@ -178,6 +183,11 @@ class GoogleTranslateOnline(
         val maxRetry = 3
         while (retryNumber < maxRetry) {
             try {
+                // Add a small jitter delay between requests to avoid rapid-fire detection
+                if (retryNumber == 0) {
+                    delay((200..600).random().toLong())
+                }
+
                 val response = callGoogleTranslateApi(text, from, to)
                 val sentences = response.sentences
                 if (sentences.isEmpty()) return text
@@ -186,9 +196,14 @@ class GoogleTranslateOnline(
             } catch (t: Throwable) {
                 logError(t)
                 if (t is UnknownHostException) throw t
+
+                if (t.message?.contains("Rate Limit", true) == true) {
+                    delay((2000L * (retryNumber + 1)).milliseconds)
+                }
+                
                 retryNumber++
                 if (retryNumber >= maxRetry) throw t
-                delay(1000L * (2.0.pow(retryNumber).toLong()))
+                delay((1000L * (2.0.pow(retryNumber).toLong()) + (0..1000).random()).milliseconds)
             }
         }
         return text

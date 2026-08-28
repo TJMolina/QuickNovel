@@ -12,6 +12,7 @@ import kotlinx.coroutines.delay
 import java.net.UnknownHostException
 import kotlin.math.pow
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class GoogleTranslateOnline(
     private val client: Requests
@@ -117,6 +118,7 @@ class GoogleTranslateOnline(
         if (contentFragments.isNotEmpty()) {
             val chunks = contentFragments.chunkByLimit()
             chunks.forEachIndexed { i, chunk ->
+                if (i > 0) delay(1.seconds) // Throttle requests within the same chapter
                 progress.invoke(i, chunks.size)
 
                 val combinedText = chunk.joinToString(PARAGRAPH_DELIMITER) { it.content }
@@ -183,7 +185,9 @@ class GoogleTranslateOnline(
         val maxRetry = 3
         while (retryNumber < maxRetry) {
             try {
-                if (retryNumber == 0) delay((200..600).random().toLong().milliseconds)
+                if (retryNumber > 0) {
+                    delay((2000L * 2.0.pow(retryNumber).toLong() + (0..1000).random()).milliseconds)
+                }
 
                 val response = callGoogleTranslateApi(text, from, to)
                 val sentences = response.sentences
@@ -194,12 +198,14 @@ class GoogleTranslateOnline(
                 logError(t)
                 if (t is UnknownHostException) throw t
 
-                if (t.message?.contains("Rate Limit", true) == true)
-                    delay((2000L * (retryNumber + 1)).milliseconds)
-
                 retryNumber++
                 if (retryNumber >= maxRetry) throw t
-                delay((1000L * (2.0.pow(retryNumber).toLong()) + (0..1000).random()).milliseconds)
+
+                if (t.message?.contains("Rate Limit", true) == true || (t is ErrorLoadingException && t.message?.contains("429") == true)) {
+                    // Longer delay for rate limits
+                    delay((5000L * retryNumber * 2).milliseconds)
+                }
+
             }
         }
         return text

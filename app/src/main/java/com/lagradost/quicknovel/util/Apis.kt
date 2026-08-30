@@ -124,7 +124,7 @@ class Apis {
             NovLoveProvider(),
             NovelPhoenixProvider(),
             PawReadProver(),
-            PlanetaEpubProvider(),
+            //PlanetaEpubProvider(), //not working
             QuanbenProvider(),
             RanobesProvider(),
             RanovelProvider(),

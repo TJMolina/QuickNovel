@@ -1,25 +1,93 @@
 package com.lagradost.quicknovel.util.translation
 
 import android.net.Uri
+import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.nicehttp.Requests
+import com.lagradost.nicehttp.ResponseParser
+import com.lagradost.nicehttp.ignoreAllSSLErrors
 import com.lagradost.quicknovel.ErrorLoadingException
+import com.lagradost.quicknovel.USER_AGENT
 import com.lagradost.quicknovel.mvvm.logError
+import com.lagradost.quicknovel.network.WebViewResolver
+import com.lagradost.quicknovel.network.utils.CookiesUtils
+import com.lagradost.quicknovel.network.utils.CookiesUtils.clearCookiesForHost
+import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.translation.models.FailedContext
 import com.lagradost.quicknovel.util.translation.models.GoogleTranslationResponse
 import com.lagradost.quicknovel.util.translation.models.OnlineTranslator
 import com.lagradost.quicknovel.util.translation.models.TranslationResult
 import kotlinx.coroutines.delay
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.OkHttpClient
 import java.net.UnknownHostException
+import java.util.concurrent.TimeUnit
 import kotlin.math.pow
+import kotlin.reflect.KClass
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-class GoogleTranslateOnline(
-    private val client: Requests
-) : OnlineTranslator {
+class GoogleTranslateOnline : OnlineTranslator {
     data class FragmentMeta(val shell: String, val content: String, val originalIndex: Int, val tags: List<String>)
 
     companion object {
+        private val USER_AGENTS = listOf(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0",
+            "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:129.0) Gecko/20100101 Firefox/129.0",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36 OPR/113.0.0.0"
+        )
+        private var userAgentIndex = 0
+
+        var app2: Requests = initApp2(USER_AGENTS[0])
+            private set
+
+        private fun initApp2(userAgent: String): Requests {
+            return Requests(
+                OkHttpClient()
+                    .newBuilder()
+                    .ignoreAllSSLErrors()
+                    .readTimeout(30L, TimeUnit.SECONDS)
+                    .build(),
+                responseParser = object : ResponseParser {
+                    val mapper: ObjectMapper = jacksonObjectMapper().configure(
+                        DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,
+                        false
+                    )
+
+                    override fun <T : Any> parse(text: String, kClass: KClass<T>): T {
+                        return mapper.readValue(text, kClass.java)
+                    }
+
+                    override fun <T : Any> parseSafe(text: String, kClass: KClass<T>): T? {
+                        return try {
+                            mapper.readValue(text, kClass.java)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+
+                    override fun writeValueAsString(obj: Any): String {
+                        return mapper.writeValueAsString(obj)
+                    }
+                }
+            ).apply {
+                defaultHeaders = mapOf("user-agent" to userAgent)
+            }
+        }
+
+        fun rotateUserAgent() {
+            userAgentIndex = (userAgentIndex + 1) % USER_AGENTS.size
+            app2 = initApp2(USER_AGENTS[userAgentIndex])
+        }
+
         private const val BASEURL = "https://translate.googleapis.com/translate_a/single?client=gtx&sl="
         private const val PARAGRAPH_DELIMITER = "\n\n\n\nFDHJEJHGYRSTJFDGLKDFGJREWY\n\n\n\n"
         private val paragraphsSeparatorRegex = Regex("\\n?FDHJEJHGYRSTJFDGLKDFGJREWY\\n?")
@@ -170,9 +238,7 @@ class GoogleTranslateOnline(
     }
 
     private suspend fun callGoogleTranslateApi(text: String, from: String, to: String): GoogleTranslationResponse {
-        val res = client.get("$BASEURL$from&tl=$to&dt=t&q=${Uri.encode(text)}")
-        if (res.code == 429) throw ErrorLoadingException("Google Translate Rate Limit Hit")
-        if (!res.isSuccessful) throw ErrorLoadingException("Google Translate Error: ${res.code}")
+        val res = app2.get(url = "$BASEURL$from&tl=$to&dt=t&q=${Uri.encode(text)}")
         return res.parsed()
     }
 
@@ -182,13 +248,9 @@ class GoogleTranslateOnline(
         to: String
     ): String {
         var retryNumber = 0
-        val maxRetry = 3
+        val maxRetry = 5
         while (retryNumber < maxRetry) {
             try {
-                if (retryNumber > 0) {
-                    delay((2000L * 2.0.pow(retryNumber).toLong() + (0..1000).random()).milliseconds)
-                }
-
                 val response = callGoogleTranslateApi(text, from, to)
                 val sentences = response.sentences
                 if (sentences.isEmpty()) return text
@@ -197,15 +259,9 @@ class GoogleTranslateOnline(
             } catch (t: Throwable) {
                 logError(t)
                 if (t is UnknownHostException) throw t
-
+                rotateUserAgent()
                 retryNumber++
                 if (retryNumber >= maxRetry) throw t
-
-                if (t.message?.contains("Rate Limit", true) == true || (t is ErrorLoadingException && t.message?.contains("429") == true)) {
-                    // Longer delay for rate limits
-                    delay((5000L * retryNumber * 2).milliseconds)
-                }
-
             }
         }
         return text

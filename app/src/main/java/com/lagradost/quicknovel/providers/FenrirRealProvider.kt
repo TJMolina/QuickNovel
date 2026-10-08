@@ -10,9 +10,11 @@ import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.setStatus
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.newChapterData
 import com.lagradost.quicknovel.newReview
+import org.jsoup.Jsoup
 import kotlin.collections.map
 
 class FenrirRealProvider : MainAPI() {
@@ -76,7 +78,7 @@ class FenrirRealProvider : MainAPI() {
         "Yuri" to "35",
     )
 
-    fun String.getSlugFromUrl() = this.replace("$mainUrl/series/", "")
+    fun String.getSlugFromUrl() = this.substringAfterLast("/series/")
 
     override suspend fun loadMainPage(
         page: Int,
@@ -121,7 +123,7 @@ class FenrirRealProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
         document.select("style, iframe, svg, noscript").remove()//avoid out of memory
-        val infoDiv = document.select("div.flex.flex-col.items-center.gap-5 div.flex-1")
+        val infoDiv = document.select("div#series-info")
         val chapters = app
             .get("$mainUrl/api/new/v2/series/${url.getSlugFromUrl()}/chapters")
             .parsed<Array<ChapterInf>>()
@@ -129,7 +131,7 @@ class FenrirRealProvider : MainAPI() {
                 if (ch.locked.price > 0) null
                 else newChapterData(
                     "${ch.name} ${if (ch.title.isNullOrEmpty()) "" else "- ${ch.title}"}",
-                    "$url/${ch.slug}"
+                    "$mainUrl/api/new/v2/series/${url.getSlugFromUrl()}/${ch.slug}"
                 ) {
                     dateOfRelease = ch.updatedAt.split("T")[0]
                 }
@@ -180,14 +182,12 @@ class FenrirRealProvider : MainAPI() {
     }
 
     override suspend fun loadHtml(url: String): String? {
-        val document = app.get(url).document
-        document.select("script, style, iframe, svg, noscript").remove()//avoid out of memory
-        document.select("[aria-hidden=\"true\"]").remove()
-        val contentElement = (document.selectFirst("div.reader-area[role=region]")
-            ?: document.selectFirst("div.main-area div.chapter-view div.content-area")
-            ?: return null).html()
-        document.empty()
-        return contentElement
+        val response = app.get(url).parsed<ChapterResponse>()
+
+        val chapterHtml = Jsoup.parse(response.content ?: return null)
+        chapterHtml.select("script, style, iframe, svg, noscript").remove()
+        chapterHtml.select("[aria-hidden=\"true\"]").remove()
+        return chapterHtml.html()
     }
 
 
@@ -257,5 +257,10 @@ class FenrirRealProvider : MainAPI() {
         val username: String,
         @JsonProperty("avatar")
         val avatar: String?
+    )
+
+    data class ChapterResponse(
+        @JsonProperty("content")
+        val content: String?
     )
 }

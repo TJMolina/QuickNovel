@@ -18,7 +18,7 @@ class ChikariProvider : MainAPI() {
     override val name = "Chikari"
     override val mainUrl = "https://chikari.moe"
     private val apiUrl = "$mainUrl/api"
-    override val iconId = R.drawable.fiber_new_24px
+    override val iconId = R.drawable.icon_chikari
     override val hasMainPage = true
     override val hasReviews = true
     override val lang = "en"

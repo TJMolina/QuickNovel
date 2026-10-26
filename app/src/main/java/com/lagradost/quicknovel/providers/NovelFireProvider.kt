@@ -131,7 +131,7 @@ open class NovelFireProvider : MainAPI() {
 
 
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url).document
+        val document = app.get(url, allowRedirects = true).document
         val infoDiv = document.select("div.novel-info")
 
         val title = infoDiv.selectFirst("h1.novel-title")?.text()
@@ -144,7 +144,8 @@ open class NovelFireProvider : MainAPI() {
             this.author = infoDiv.selectFirst("div.author > a")?.text()
             this.posterUrl = fixUrlNull(document.selectFirst("figure.cover img")?.attr("src"))
             this.synopsis =
-                document.selectFirst("meta[itemprop=description]")?.attr("content") ?: ""
+                document.selectFirst("meta[itemprop=description]")?.attr("content")
+                    ?: document.selectFirst("div.summary > div")?.html() ?: ""
 
             this.tags = infoDiv.select("div.categories ul li").mapNotNull {
                 it.text().trim().takeIf { text -> text.isNotEmpty() }

@@ -277,80 +277,6 @@ class MainActivity : AppCompatActivity() {
             }
             return false
         }
-
-        /*fun AppCompatActivity.backPressed(): Boolean {
-            this.window?.navigationBarColor =
-                this.colorFromAttribute(R.attr.primaryGrayBackground)
-
-            val currentFragment = supportFragmentManager.fragments.last {
-                it.isVisible
-            }
-
-            if (currentFragment is NavHostFragment) {
-                val child = currentFragment.childFragmentManager.fragments.last {
-                    it.isVisible
-                }
-                if (child is MainPageFragment) {
-                    val navController = findNavController(R.id.nav_host_fragment)
-                    navController.navigate(R.id.navigation_homepage, Bundle(), navOptions)
-                    return true
-                }
-            }
-
-            if (currentFragment != null && supportFragmentManager.fragments.size > 2) {
-                if (supportFragmentManager.fragments.size == 3) {
-                    //window?.navigationBarColor =
-                    //    colorFromAttribute(R.attr.primaryBlackBackground)
-                }
-                //MainActivity.showNavbar()
-                supportFragmentManager.beginTransaction()
-                    .setCustomAnimations(
-                        R.anim.enter_anim,
-                        R.anim.exit_anim,
-                        R.anim.pop_enter,
-                        R.anim.pop_exit
-                    )
-                    .remove(currentFragment)
-                    .commitAllowingStateLoss()
-                supportFragmentManager
-                return true
-            }
-            return false
-        }*/
-
-        /* fun semihideNavbar() {
-             activity
-             val w: Window? = activity?.window // in Activity's onCreate() for instance
-             if (w != null) {
-                 val uiVisibility =
-                     View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                 w.decorView.systemUiVisibility = uiVisibility
-                 w.navigationBarColor =
-                     activity?.getResourceColor(android.R.attr.navigationBarColor, 0.7F)
-             }
-         }
-
-         fun showNavbar() {
-             val w: Window? = activity.window // in Activity's onCreate() for instance
-             if (w != null) {
-                 w.decorView.systemUiVisibility = 0
-                 w.navigationBarColor = android.R.attr.navigationBarColor
-             }
-         }
-
-         fun transNavbar(trans: Boolean) {
-             val w: Window? = activity.window // in Activity's onCreate() for instance
-             if (w != null) {
-                 if (trans) {
-                     w.setFlags(
-                         WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS,
-                         WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
-                     )
-                 } else {
-                     w.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
-                 }
-             }
-         }*/
     }
 
     private fun NavDestination.matchDestination(@IdRes destId: Int): Boolean =
@@ -415,6 +341,14 @@ class MainActivity : AppCompatActivity() {
             importUri(uri)
         }
 
+    private val epubPathsPicker =
+        registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (uris.isEmpty()) return@registerForActivityResult
+            uris.forEach { uri ->
+                importUri(uri)
+            }
+        }
+
     private fun openEpubPicker() {
         safe {
             epubPathPicker.launch(
@@ -430,7 +364,7 @@ class MainActivity : AppCompatActivity() {
     }
     private fun openEpubPickers() {
         safe {
-            epubPathPicker.launch(
+            epubPathsPicker.launch(
                 arrayOf(
                     //"text/plain",
                     //"text/str",
@@ -591,17 +525,6 @@ class MainActivity : AppCompatActivity() {
         navController.addOnDestinationChangedListener { _: NavController, navDestination: NavDestination, bundle: Bundle? ->
             // Intercept search and add a query
             updateNavBar(navDestination)
-            /*if (navDestination.matchDestination(R.id.navigation_search) && !nextSearchQuery.isNullOrBlank()) {
-                bundle?.apply {
-                    this.putString(SearchFragment.SEARCH_QUERY, nextSearchQuery)
-                }
-            }
-
-            if (isTvSettings()) {
-                if (navDestination.matchDestination(R.id.navigation_home)) {
-                    attachBackPressedCallback()
-                } else detachBackPressedCallback()
-            }*/
         }
 
         val navView: BottomNavigationView = findViewById(R.id.nav_view)
@@ -634,160 +557,7 @@ class MainActivity : AppCompatActivity() {
             .setPopExitAnim(R.anim.nav_pop_exit)
             .setPopUpTo(navController.graph.startDestinationId, false)
             .build()
-        /*
-                navView.setOnNavigationItemReselectedListener { item ->
-                    return@setOnNavigationItemReselectedListener
-                }*/
-        /*navView.setOnNavigationItemSelectedListener { item ->
-            when (item.itemId) {
-                R.id.navigation_homepage -> {
-                    navController.navigate(R.id.navigation_homepage, null, navOptions)
-                }
 
-                R.id.navigation_search -> {
-                    navController.navigate(R.id.navigation_search, null, navOptions)
-                }
-
-                R.id.navigation_download -> {
-                    navController.navigate(R.id.navigation_download, null, navOptions)
-                }
-
-                R.id.navigation_history -> {
-                    navController.navigate(R.id.navigation_history, null, navOptions)
-                }
-
-                R.id.navigation_settings -> {
-                    navController.navigate(R.id.navigation_settings, null, navOptions)
-                }
-            }
-            true
-        }*/
-
-        /*
-
-        observe(viewModel.downloadState) { progressState ->
-            val hasDownload = progressState != null && progressState.progress > 0
-
-
-            bottomPreviewBinding?.downloadDeleteTrashFromResult?.apply {
-                isVisible = hasDownload
-                isClickable = hasDownload
-            }
-        }
-
-        observe(viewModel.libraryId) { libraryId ->
-            bottomPreviewBinding?.bookmark?.setIconResource(if ( libraryId == 0) R.drawable.ic_baseline_bookmark_border_24 else R.drawable.ic_baseline_bookmark_24)
-            val selectedLibrary = this@MainActivity.getBookmarks().firstOrNull { it.id == libraryId }
-            bottomPreviewBinding?.bookmark?.text = selectedLibrary?.title ?: getString(R.string.type_none)
-        }
-
-        observeNullable(viewModel.loadResponse) { resource ->
-            if (resource == null) {
-                bottomPreviewPopup.dismissSafe(this)
-                return@observeNullable
-            }
-            when (resource) {
-                is Resource.Failure -> {
-                    showToast(this, R.string.error_loading_novel)
-                    hidePreviewPopupDialog()
-                }
-
-                is Resource.Loading -> {
-                    showPreviewPopupDialog().apply {
-                        resultviewPreviewLoading.isVisible = true
-                        resultviewPreviewResult.isVisible = false
-                    }
-                }
-
-                is Resource.Success -> {
-                    val d = resource.value
-                    showPreviewPopupDialog().apply {
-                        downloadDeleteTrashFromResult.setOnClickListener {
-                            viewModel.deleteAlert()
-                        }
-
-                        bookmark.setOnClickListener { view ->
-                            view.popupMenu(
-                                ReadType.entries.map { it.prefValue to it.stringRes },
-                                selectedItemId = viewModel.readState.value?.prefValue
-                            ) {
-                                viewModel.bookmark(itemId)
-                            }
-                        }
-
-                        readMore.setOnClickListener {
-                            if(!d.isImported) {
-                                loadResult(d.url, viewModel.apiName)
-                                hidePreviewPopupDialog()
-                            }
-                        }
-
-                        readMore.isVisible =
-                            viewModel.apiName != IMPORT_SOURCE && viewModel.apiName != IMPORT_SOURCE_PDF
-                        bookmark.isVisible =
-                            viewModel.apiName != IMPORT_SOURCE && viewModel.apiName != IMPORT_SOURCE_PDF
-
-                        resultviewPreviewLoading.isVisible = false
-                        resultviewPreviewResult.isVisible = true
-
-                        resultviewPreviewPoster.apply {
-                            setImage(d.downloadImage())
-                            setOnClickListener {
-                                if(!d.isImported) {
-                                    loadResult(d.url, viewModel.apiName)
-                                    hidePreviewPopupDialog()
-                                }
-                            }
-                        }
-
-                        resultviewPreviewTitle.text = d.name
-
-                        resultviewPreviewMoreInfo.setOnClickListener {
-                            if(!d.isImported) {
-                                loadResult(d.url, viewModel.apiName)
-                                hidePreviewPopupDialog()
-                            }
-                        }
-
-                        resultviewPreviewDescription.text =
-                            d.synopsis?.html() ?: getString(R.string.no_data)
-
-                        resultviewPreviewDescription.setOnClickListener { view ->
-                            view.context?.let { ctx ->
-                                val builder: AlertDialog.Builder =
-                                    AlertDialog.Builder(ctx, R.style.AlertDialogCustom)
-                                builder.setMessage(d.synopsis.html())
-                                    .setTitle(d.name)
-                                    .show()
-                            }
-                        }
-
-                        d.rating?.let { rating ->
-                            resultviewPreviewMetaRating.text = getRating(rating)
-                            resultviewPreviewMetaRating.isVisible = true
-                        } ?: run {
-                            resultviewPreviewMetaRating.isVisible = false
-                        }
-
-                        resultviewPreviewMetaStatus.apply {
-                            val statusTxt = d.status?.resource?.let { getString(it) } ?: ""
-
-                            resultviewPreviewMetaStatus.text = statusTxt
-                            resultviewPreviewMetaStatus.isVisible = statusTxt.isNotBlank()
-                        }
-
-                        if (d is StreamResponse) {
-                            resultviewPreviewMetaChapters.text =
-                                "${d.data.size} ${getString(R.string.chapter_sort)}"
-                            resultviewPreviewMetaChapters.isVisible = d.data.isNotEmpty()
-                        } else {
-                            resultviewPreviewMetaChapters.isVisible = false
-                        }
-                    }
-                }
-            }
-        }
-*/
         //navView.itemRippleColor =
         //    ColorStateList.valueOf(getResourceColor(R.attr.colorPrimary, 0.1f))
 
@@ -796,12 +566,6 @@ class MainActivity : AppCompatActivity() {
         val edit = settingsManager.edit()
         edit.putStringSet(getString(R.string.search_providers_list_key), providersActive)
         edit.apply()
-        /*
-        val apiName = settingsManager.getString(getString(R.string.provider_list_key), apis[0].name)
-        activeAPI = getApiFromName(apiName ?: apis[0].name)
-        val edit = settingsManager.edit()
-        edit.putString(getString(R.string.provider_list_key, activeAPI.name), activeAPI.name)
-        edit.apply()*/
 
         thread { // IDK, WARMUP OR SMTH, THIS WILL JUST REDUCE THE INITIAL LOADING TIME FOR DOWNLOADS, NO REAL USAGE, SEE @WARMUP
             val keys = getKeys(DOWNLOAD_FOLDER)

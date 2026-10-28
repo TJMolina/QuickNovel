@@ -422,6 +422,7 @@ fun Context.mergeBookmarks(backupJson: String) {
                 lastPos++
                 val newBookmark = backupLib.copy(id = lastId, position = lastPos)
                 currentLibs.add(newBookmark)
+                saveBookmarks(currentLibs)
 
                 //If the bookmark contained novels, I have to update their position and ID data
                 reassignBookmark(sourceId = backupLib.id, targetId = newBookmark.id)

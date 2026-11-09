@@ -1,7 +1,7 @@
 package com.lagradost.quicknovel.util.translation.models
 
-enum class TranslatorAgents(val title: String){
-    OFFLINE(""),
-    ONLINE("online"),
-    GEMINI("gemini")
+enum class TranslatorAgents {
+    OFFLINE,
+    ONLINE,
+    GEMINI
 }

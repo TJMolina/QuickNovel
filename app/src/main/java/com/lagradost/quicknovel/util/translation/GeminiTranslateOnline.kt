@@ -38,23 +38,16 @@ class GeminiTranslateOnline(
     ): TranslationResult {
         if (textList.isEmpty()) return TranslationResult(emptyList(), emptyList())
 
-        val allTranslatedLines = Array(textList.size) { "" }
-        val failedContexts = mutableListOf<FailedContext>()
-
+        val allTranslatedLines = textList.toMutableList()
+        val failedParagraphs = mutableListOf<FailedContext>()
         val contentParagraphs = mutableListOf<String>()
-        val contentIndices = mutableListOf<Int>()
+        val paragraphIndices = mutableListOf<Int>()
 
         textList.forEachIndexed { index, text ->
-            if (!TranslationsUtils.isTranslatable(text, isHtml)) {
-                allTranslatedLines[index] = TranslationsUtils.sanitize(text)
-            } else {
+            if (TranslationsUtils.isTranslatable(text, isHtml) != null) {
                 contentParagraphs.add(TranslationsUtils.sanitize(text))
-                contentIndices.add(index)
+                paragraphIndices.add(index)
             }
-        }
-
-        if (contentParagraphs.isEmpty()) {
-            return TranslationResult(allTranslatedLines.toList(), emptyList())
         }
 
         val chunks = chunkByLimit(contentParagraphs, MAX_CHARS_PER_CHUNK)
@@ -66,13 +59,13 @@ class GeminiTranslateOnline(
             val result = recursiveTranslate(chunkLines, from, to, isHtml)
 
             result.forEach { (isSuccess, translatedText) ->
-                if (contentPointer < contentIndices.size) {
-                    val originalGlobalIndex = contentIndices[contentPointer]
+                if (contentPointer < paragraphIndices.size) {
+                    val originalGlobalIndex = paragraphIndices[contentPointer]
 
                     if (isSuccess) {
                         allTranslatedLines[originalGlobalIndex] = translatedText
                     } else {
-                        failedContexts.add(FailedContext(originalGlobalIndex, translatedText))
+                        failedParagraphs.add(FailedContext(originalGlobalIndex, translatedText))
                         allTranslatedLines[originalGlobalIndex] = "[TRANSLATION_FAILED]"
                     }
                     contentPointer++
@@ -80,7 +73,7 @@ class GeminiTranslateOnline(
             }
         }
 
-        return TranslationResult(allTranslatedLines.toList(), failedContexts)
+        return TranslationResult(allTranslatedLines.toList(), failedParagraphs)
     }
     /**
      * Recursively handles translation. If a block of text is flagged by safety filters,

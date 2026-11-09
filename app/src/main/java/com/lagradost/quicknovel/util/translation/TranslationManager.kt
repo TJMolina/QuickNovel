@@ -1,5 +1,6 @@
 package com.lagradost.quicknovel.util.translation
 
+import androidx.core.text.HtmlCompat
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.common.model.RemoteModelManager
@@ -56,7 +57,7 @@ class TranslationManager {
         }
     }
 
-    suspend fun prepareModel(from: String, to: String): Translator? {
+    suspend fun prepareModel(from: String, to: String, downloadIfNeeded: Boolean = true): Translator? {
         try {
             if (translator != null && cachedFrom == from && cachedTo == to) {
                 return translator
@@ -74,7 +75,7 @@ class TranslationManager {
 
             val client = Translation.getClient(options)
 
-            if (!isModelDownloaded(from, to)) {
+            if (downloadIfNeeded && !isModelDownloaded(from, to)) {
                 Tasks.await(client.downloadModelIfNeeded(DownloadConditions.Builder().build()))
             }
 
@@ -100,14 +101,14 @@ class TranslationManager {
         progress: suspend (Int, Int) -> Unit = { _, _ -> }
     ): String {
         if (text.isBlank()) return text
-        
+
         return if (isHtml) {
             val doc = Jsoup.parse(text)
             val fragments = mutableListOf<String>()
             TranslationsUtils.htmlToTranslatableList(doc.body(), fragments)
-            
+
             if (fragments.isEmpty()) return text
-            
+
             val translatedList = translate(
                 textList = fragments,
                 from = from,
@@ -116,9 +117,16 @@ class TranslationManager {
                 isHtml = true,
                 progress = progress
             )
-            translatedList.joinToString("<br>\n")
+            translatedList.joinToString("<br><br>")
         } else {
-            val result = translate(listOf(text), from, to, agent, false, progress)
+            val result = translate(
+                textList = listOf(text),
+                from = from,
+                to = to,
+                agent = agent,
+                isHtml = false,
+                progress = progress
+            )
             result.firstOrNull() ?: text
         }
     }
@@ -163,10 +171,11 @@ class TranslationManager {
         val client = prepareModel(from, to) ?: throw Exception("Offline model not available")
         return textList.mapIndexed { index, text ->
             currentCoroutineContext().ensureActive()
-            if (!TranslationsUtils.isTranslatable(text, isHtml)) return@mapIndexed text
-            
+            val textToTranslate = TranslationsUtils.isTranslatable(text, isHtml) ?: return@mapIndexed text
+            val decodedText = HtmlCompat.fromHtml(textToTranslate, HtmlCompat.FROM_HTML_MODE_LEGACY).toString()
+            val translatedText = Tasks.await(client.translate(decodedText))
             progress(index + 1, textList.size)
-            Tasks.await(client.translate(TranslationsUtils.sanitize(text)))
+            translatedText.replace("<", "&lt;").replace(">", "&gt;")
         }
     }
 

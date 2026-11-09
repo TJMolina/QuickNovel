@@ -8,10 +8,11 @@ import org.jsoup.nodes.TextNode
 object TranslationsUtils {
     const val TAG_DELIMITER = "\n\n\n\nKJHHYQ3TVI4FPHT\n\n\n\n"
     private val leafTags = setOf("img", "hr", "br")
-    private val blockTags = setOf("p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "tr", "td", "th")
-    private val containerTags = setOf("div", "main", "section", "article", "body", "table", "tbody", "ul", "ol", "center")
+    private val blockTags = setOf("p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "tr", "td", "th, dt, dd")
+    private val containerTags = setOf("div", "main", "section", "article", "body", "table", "tbody", "ul", "ol", "center, dl")
     private val structuralTags = setOf("p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "center")
-
+    private val HTML_TAG_REGEX = Regex("(?<!<)<[^>]+>(?!>)")
+    private val HTML_SPACE_ENTITIES = Regex("&(nbsp|#160|#32);", RegexOption.IGNORE_CASE)
     fun htmlToTranslatableList(node: Node, out: MutableList<String>) {
         if (node is Element) {
             val tagName = node.tagName().lowercase()
@@ -127,14 +128,16 @@ object TranslationsUtils {
         return text.replace(Regex("[\u200B-\u200F\uFEFF]"), "")
     }
 
-    fun isTranslatable(text: String, isHtml: Boolean): Boolean {
-        if (text.isBlank()) return false
+    fun isTranslatable(text: String, isHtml: Boolean): String? {
+        if (text.isBlank()) return null
         val sanitized = sanitize(text)
         return if (isHtml) {
-            val plainText = Jsoup.parse(sanitized).text()
-            plainText.isNotBlank() && plainText.any { it.isLetter() }
+            val plainText = sanitized
+                .replace(HTML_TAG_REGEX, "")
+                .replace(HTML_SPACE_ENTITIES, "")
+            if(plainText.any { it.isLetter() }) plainText else null
         } else {
-            sanitized.trim().any { it.isLetter() }
+            if(sanitized.any { it.isLetter() }) sanitized else null
         }
     }
 }

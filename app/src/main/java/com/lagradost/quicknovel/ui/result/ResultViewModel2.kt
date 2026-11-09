@@ -58,6 +58,7 @@ import com.lagradost.quicknovel.util.updates.data.UpdatesManager
 import com.lagradost.quicknovel.updateBookmark
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromName
+import com.lagradost.quicknovel.mvvm.logError
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
@@ -206,6 +207,7 @@ class ResultViewModel2(
         if (initialUrl != null) {
             viewModelScope.launch {
                 api?.loadResult(initialUrl)?.onFailure { error ->
+                    logError(error)
                     updateState { copy(responseError = error, loadingResponse = false) }
                 }?.onSuccess { value ->
                     val bookId = value.id ?: throw IllegalStateException("loadResult must give an id")
@@ -419,6 +421,7 @@ class ResultViewModel2(
             }
             ImmutableSearchResponse.addToHistory(finalResponse, freshBookmarkId)
         }.onFailure { error ->
+            logError(error)
             updateState {
                 copy(
                     loadingResponse = false,
@@ -459,13 +462,6 @@ class ResultViewModel2(
         val currentState = state.value
         val target = currentState.deleteTarget ?: currentState.response ?: return@launch
         val id = target.id ?: BookDownloader2Helper.generateId(target.apiName, target.author, target.name)
-
-        val context = BaseApplication.context ?: return@launch
-        with(DataStore) {
-            context.removeKey(RESULT_BOOKMARK_STATE, id.toString())
-            context.removeKey(RESULT_BOOKMARK, id.toString())
-        }
-
         BookDownloader2.deleteNovel(target.author, target.name, target.apiName)
 
         BookDownloader2.bookmarkChanged(id)

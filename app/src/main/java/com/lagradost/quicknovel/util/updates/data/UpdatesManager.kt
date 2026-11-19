@@ -12,7 +12,6 @@ import com.lagradost.quicknovel.RESULT_BOOKMARK_STATE
 import com.lagradost.quicknovel.util.ResultCached
 object UpdatesManager {
     fun addToWatchList(cached: ResultCached) {
-        if (isWatched(cached.id)) return
         setKey(NOVEL_WATCH_FOLDER, cached.id.toString(), true)
         saveEntry(cached)
     }
@@ -33,19 +32,12 @@ object UpdatesManager {
         }
     }
 
-    fun getEntry(novelId: Int): ResultCached? =
-        getKey<ResultCached>(RESULT_BOOKMARK, novelId.toString())
-            ?: getKey<ResultCached>(HISTORY_FOLDER, novelId.toString())
+    fun getEntry(novelId: Int): ResultCached? = getKey<ResultCached>(RESULT_BOOKMARK, novelId.toString())
 
     fun saveEntry(entry: ResultCached) {
         val id = entry.id.toString()
-        // Always save to history as the master record
+        setKey(RESULT_BOOKMARK, id, entry)
         setKey(HISTORY_FOLDER, id, entry)
-
-        // Only save to bookmarks if it's actually bookmarked
-        if (getKey<Int>(RESULT_BOOKMARK_STATE, id) != null) {
-            setKey(RESULT_BOOKMARK, id, entry)
-        }
         BookDownloader2.bookmarkChanged(entry.id)
     }
 
@@ -66,11 +58,12 @@ object UpdatesManager {
     // ── Network Check ───────────────────────────────────────────────────────
 
     /** Verifies online and persists the result. Returns the updated ResultCached. */
-    suspend fun checkForUpdate(entry: ResultCached): ResultCached {
+    suspend fun checkForUpdate(entry: ResultCached): Pair<Int, ResultCached> {
+        val oldTotalChapters = entry.totalChapters
         val updatedCached = BookDownloader2.getNewTotalChapters(entry, -1)
         val now = System.currentTimeMillis()
         val result = updatedCached?.copy(cachedTime = now) ?: entry // Failed check, return same
         saveEntry(result)
-        return result
+        return oldTotalChapters to result
     }
 }

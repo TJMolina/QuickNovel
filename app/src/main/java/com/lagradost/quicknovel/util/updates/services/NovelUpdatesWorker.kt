@@ -31,9 +31,10 @@ class NovelUpdatesWorker(
             }
 
             // Post one notification per novel that has new chapters
-            updatedEntries.forEach { entry ->
-                val last = entry.lastTotalChapters ?: entry.totalChapters
-                if (entry.totalChapters > last) {
+            updatedEntries.forEach { update ->
+                val (oldTotalChapters, entry) = update
+                val last = entry.lastTotalChapters ?: oldTotalChapters
+                if (entry.totalChapters > last && entry.totalChapters > oldTotalChapters) {
                     UpdatesNotificationHelper.postEntryNotification(entry, ctx)
                 }
             }

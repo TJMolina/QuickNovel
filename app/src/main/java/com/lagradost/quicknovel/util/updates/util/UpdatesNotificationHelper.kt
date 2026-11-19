@@ -72,7 +72,7 @@ object UpdatesNotificationHelper {
         )
 
         val builder = NotificationCompat.Builder(ctx, UPDATES_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_baseline_notifications_active_24)
+            .setSmallIcon(R.drawable.ic_quicknovel)
             .setContentTitle(entry.name)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -88,7 +88,6 @@ object UpdatesNotificationHelper {
         NotificationHelper.getLargeIcon(ctx, entry.poster)?.let {
             builder.setLargeIcon(it)
         }
-
         try {
             NotificationManagerCompat.from(ctx).notify(entry.id.hashCode(), builder.build())
         } catch (e: Throwable) {

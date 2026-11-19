@@ -140,7 +140,7 @@ class MainActivity : AppCompatActivity() {
             OkHttpClient()
                 .newBuilder()
                 .ignoreAllSSLErrors()
-                .readTimeout(30L, TimeUnit.SECONDS)
+                .readTimeout(50L, TimeUnit.SECONDS)
                 .build(),
             responseParser = object : ResponseParser {
                 val mapper: ObjectMapper = jacksonObjectMapper().configure(

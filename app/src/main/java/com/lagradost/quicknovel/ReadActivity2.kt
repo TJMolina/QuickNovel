@@ -1324,7 +1324,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
             binding.readOnlineTranslationSwitch.isChecked = viewModel.currentAgent != TranslatorAgents.OFFLINE
             binding.readOnlineTranslationSwitch.setOnCheckedChangeListener { _, isChecked ->
-                viewModel.mlTranslationAgent = if (isChecked) TranslatorAgents.ONLINE.name
+                viewModel.mlTranslationAgent = if (isChecked) TranslatorAgents.GEMINI.name
                 else TranslatorAgents.OFFLINE.name
 
                 //Do not allow automatic detection of the target language; the user should know that themselves (they should know the name of their own language).
@@ -1364,7 +1364,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 ioSafe {
                     try {
                         if (!viewModel.requireMLDownload()) {
-                            viewModel.applyMLSettings()
+                            viewModel.applyMLSettings(false)
                             runOnUiThread { bottomSheetDialog.dismiss() }
                         } else {
                             runOnUiThread {
@@ -1372,7 +1372,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                                     .setTitle(R.string.download_ml)
                                     .setMessage(R.string.download_ml_long)
                                     .setPositiveButton(R.string.download) { _, _ ->
-                                        viewModel.applyMLSettings()
+                                        viewModel.applyMLSettings(true)
                                         bottomSheetDialog.dismiss()
                                     }
                                     .setNegativeButton(R.string.cancel, null)

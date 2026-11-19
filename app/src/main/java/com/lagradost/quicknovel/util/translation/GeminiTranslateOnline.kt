@@ -2,14 +2,25 @@ package com.lagradost.quicknovel.util.translation
 import com.lagradost.nicehttp.Requests
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.util.translation.models.FailedContext
+import com.lagradost.quicknovel.util.translation.models.GeminiApiException
+import com.lagradost.quicknovel.util.translation.models.GeminiEmptyResponseException
+import com.lagradost.quicknovel.util.translation.models.GeminiErrorDetail
+import com.lagradost.quicknovel.util.translation.models.GeminiOverloadException
+import com.lagradost.quicknovel.util.translation.models.GeminiRateLimitException
+import com.lagradost.quicknovel.util.translation.models.GeminiSafetyError
+import com.lagradost.quicknovel.util.translation.models.GeminiTranslationException
 import com.lagradost.quicknovel.util.translation.models.GeminiTranslationResponse
 import com.lagradost.quicknovel.util.translation.models.OnlineTranslator
 import com.lagradost.quicknovel.util.translation.models.TranslationResult
 import kotlinx.coroutines.delay
 import java.net.UnknownHostException
+import kotlin.time.Duration.Companion.milliseconds
+import java.util.ArrayDeque
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 
-class GeminiTranslationException(message: String) : Exception(message)
+
 
 /**
  * Get an API key at: https://aistudio.google.com/
@@ -23,10 +34,73 @@ class GeminiTranslateOnline(
     }
     companion object {
         private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/"
-        private const val MAX_CHARS_PER_CHUNK = 10000
-        private const val MAX_RETRIES = 3
-        private const val SAFETY_ERROR = "SAFETY_BLOCKED"
+        private const val MAX_CHARS_PER_CHUNK = 5000
+        private const val MAX_RETRIES = 15
+        private const val TRANSLATION_FAILED = "[TRANSLATION_FAILED]"
         private val MODELS = listOf("gemini-3.1-flash-lite")
+
+        private const val MAX_RPM = 8
+        private const val WINDOW_MILLIS = 60_000L
+        private val timestamps = ArrayDeque<Long>()
+        private val rateLimitMutex = Mutex()
+
+        suspend fun acquireRateLimit() {
+            rateLimitMutex.withLock {
+                val now = System.currentTimeMillis()
+                while (timestamps.isNotEmpty() && now - timestamps.first >= WINDOW_MILLIS) {
+                    timestamps.removeFirst()
+                }
+
+                if (timestamps.size >= MAX_RPM) {
+                    val oldest = timestamps.first
+                    val waitTime = WINDOW_MILLIS - (now - oldest)
+                    if (waitTime > 0) {
+                        delay((waitTime + 50).milliseconds)
+                    }
+                    val updatedNow = System.currentTimeMillis()
+                    while (timestamps.isNotEmpty() && updatedNow - timestamps.first >= WINDOW_MILLIS) {
+                        timestamps.removeFirst()
+                    }
+                    timestamps.addLast(updatedNow)
+                } else {
+                    timestamps.addLast(now)
+                }
+            }
+        }
+
+        private fun parseRetryDelay(details: List<GeminiErrorDetail>?): Long? {
+            if (details == null) return null
+            for (detail in details) {
+                detail.retryDelay?.let { raw->
+                    val parsed = when (raw) {
+                        is Number -> raw.toLong() * 1000L
+                        is String -> parseDurationToMillis(raw)
+                        else -> parseDurationToMillis(raw.toString())
+                    }
+                    if (parsed != null && parsed > 0) return parsed
+                }
+            }
+            return null
+        }
+
+        private fun parseDurationToMillis(durationStr: String): Long? {
+            return try {
+                val cleaned = durationStr.trim()
+                when {
+                    cleaned.endsWith("ms", ignoreCase = true) -> {
+                        cleaned.substring(0, cleaned.length - 2).toDoubleOrNull()?.toLong()
+                    }
+                    cleaned.endsWith("s", ignoreCase = true) -> {
+                        (cleaned.substring(0, cleaned.length - 1).toDoubleOrNull()?.times(1000))?.toLong()
+                    }
+                    else -> {
+                        cleaned.toDoubleOrNull()?.times(1000)?.toLong() ?: cleaned.toLongOrNull()
+                    }
+                }
+            } catch (e: Exception) {
+                null
+            }
+        }
     }
 
     override suspend fun translate(
@@ -44,13 +118,13 @@ class GeminiTranslateOnline(
         val paragraphIndices = mutableListOf<Int>()
 
         textList.forEachIndexed { index, text ->
-            if (TranslationsUtils.isTranslatable(text, isHtml) != null) {
+            if (TranslationsUtils.getTranslatableText(text, isHtml) != null) {
                 contentParagraphs.add(TranslationsUtils.sanitize(text))
                 paragraphIndices.add(index)
             }
         }
 
-        val chunks = chunkByLimit(contentParagraphs, MAX_CHARS_PER_CHUNK)
+        val chunks = chunkByLimit(contentParagraphs)
         var contentPointer = 0
 
         chunks.forEachIndexed { index, chunkLines ->
@@ -66,7 +140,7 @@ class GeminiTranslateOnline(
                         allTranslatedLines[originalGlobalIndex] = translatedText
                     } else {
                         failedParagraphs.add(FailedContext(originalGlobalIndex, translatedText))
-                        allTranslatedLines[originalGlobalIndex] = "[TRANSLATION_FAILED]"
+                        allTranslatedLines[originalGlobalIndex] = TRANSLATION_FAILED
                     }
                     contentPointer++
                 }
@@ -81,17 +155,15 @@ class GeminiTranslateOnline(
      */
     private suspend fun recursiveTranslate(
         lines: List<String>,
-        source: String,
-        target: String,
+        from: String,
+        to: String,
         isHtml: Boolean
     ): List<Pair<Boolean, String>> {
         return try {
             // Try to translate the entire block at once
-            val translated = callGeminiWithRetry(lines.joinToString("\n"), source, target, isHtml)
+            val translated = callGeminiWithRetry(lines.joinToString("\n"), from, to, isHtml)
             val translatedLines = translated.lines().filter { it.isNotBlank() }
-
-            // If successful, split the response back into individual lines
-            // We trim and filter blank lines to avoid empty paragraphs
+            
             // Each line is paired with 'true' to indicate success
             if (translatedLines.size != lines.size) {
                 lines.map { false to it }
@@ -100,24 +172,23 @@ class GeminiTranslateOnline(
             }
 
         } catch (e: Exception) {
-            // If Gemini says "SAFETY_BLOCKED" and we have more than one line, we split.
+            // If Gemini says "SAFETY_BLOCKED", allow retries by splitting or mark as failed for Google Translate fallback.
             when (e) {
-                is GeminiTranslationException if e.message == SAFETY_ERROR && lines.size > 1 -> {
+                is GeminiSafetyError if lines.size > 1 -> {
                     val mid = lines.size / 2
                     val leftHalf = lines.subList(0, mid)
                     val rightHalf = lines.subList(mid, lines.size)
 
-                    // It processes the left part, then the right part, and joins them (+).
-                    // This structure physically forces the original order to be maintained.
-                    recursiveTranslate(leftHalf, source, target, isHtml) +
-                            recursiveTranslate(rightHalf, source, target, isHtml)
+                    recursiveTranslate(leftHalf, from, to, isHtml) +
+                            recursiveTranslate(rightHalf, from, to, isHtml)
                 }
-                //CONNECTION ERROR
-                is UnknownHostException -> throw e
-                else -> {
-                    // If we are down to 1 line, and it still fails, or it's a non-safety error,
-                    // we mark these lines as 'false' (failed) so the secondary translator can take over.
+                is GeminiSafetyError -> {
+                    // Safety block on single line: return failed so Google Translate fallback can take over
                     lines.map { false to it }
+                }
+                // for rate limits, overloads, exhausted retries, connection errors: throw exception (no Google Translate fallback)
+                else -> {
+                    throw e
                 }
             }
         }
@@ -126,36 +197,54 @@ class GeminiTranslateOnline(
     /**
      * Handles the network request, model fallback, and retries (429 errors).
      */
-    private suspend fun callGeminiWithRetry(text: String, source: String, target: String, isHtml: Boolean): String {
+    private suspend fun callGeminiWithRetry(text: String, from: String, to: String, isHtml: Boolean): String {
         var lastError: Exception? = null
 
         for (model in MODELS) {
             repeat(MAX_RETRIES) { attempt ->
                 try {
+                    // Respect the RPM rate limiter before making any request attempt
+                    acquireRateLimit()
+
                     val res = client.post(
                         url = "$BASE_URL$model:generateContent",
-                        json = buildRequestBody(text, source, target, isHtml = isHtml),
+                        json = buildRequestBody(text, from, to, isHtml = isHtml),
                         headers = mapOf("X-Goog-API-Key" to apiKey)
                     ).parsed<GeminiTranslationResponse>()
                     if(res.error != null){
-                        //rate limit error
-                        if (res.error.code == 429) {
-                            val retryDelayStr = res.error.details?.find { it.retryDelay != null }?.retryDelay
-                            val waitTime = retryDelayStr?.removeSuffix("s")?.toDoubleOrNull()?.let { (it * 1000).toLong() }
-                                ?: (15000L * (attempt + 1))
-                            delay(waitTime)
-                            throw GeminiTranslationException("Rate limit hit")
+                        //rate limit or model overload error
+                        val errorMessage = res.error.message
+                        val isRateLimit = res.error.code == 429
+                        val isOverloaded = res.error.code == 503 ||
+                                errorMessage.contains("overloaded", ignoreCase = true) ||
+                                errorMessage.contains("busy", ignoreCase = true) ||
+                                errorMessage.contains("experiencing high demand", ignoreCase = true) ||
+                                errorMessage.contains("resource_exhausted", ignoreCase = true)
+
+                        if (isRateLimit || isOverloaded) {
+                            val serverDelay = parseRetryDelay(res.error.details)
+                            val baseDelay = serverDelay ?: (2000L * (attempt + 1))
+                            val jitter = kotlin.random.Random.nextLong(0, 1000L)
+                            val delay = baseDelay + jitter
+                            delay(delay.milliseconds)
+
+                            if (isOverloaded) {
+                                throw GeminiOverloadException(errorMessage)
+                            } else {
+                                throw GeminiRateLimitException(errorMessage)
+                            }
                         } else {
-                            throw GeminiTranslationException("API Error: ${res.error.message}")
+                            throw GeminiApiException(errorMessage)
                         }
                     }else{
                         // Check for safety blocks in prompt or candidates
+                        val blockReason = res.promptFeedback?.blockReason ?: res.candidates?.firstOrNull()?.finishReason
                         val isBlocked = res.promptFeedback?.blockReason?.isNotBlank() == true ||
                                 res.candidates?.firstOrNull()?.finishReason in listOf("SAFETY", "PROHIBITED_CONTENT")
 
-                        if (isBlocked) throw GeminiTranslationException(SAFETY_ERROR)
+                        if (isBlocked) throw GeminiSafetyError(blockReason ?: "SAFETY BLOCKED")
                         return res.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
-                            ?: throw GeminiTranslationException("Empty response")
+                            ?: throw GeminiEmptyResponseException("Empty response from Gemini")
                     }
 
                 } catch (e: Exception) {
@@ -165,22 +254,22 @@ class GeminiTranslateOnline(
                     //Wi-Fi error, don't retry
                     if (e is UnknownHostException) throw e
                     // Don't retry if it's a safety block
-                    else if (e.message == SAFETY_ERROR) throw e
+                    else if (e is GeminiSafetyError) throw e
                 }
             }
         }
-        throw GeminiTranslationException("All retries failed: ${lastError?.message}")
+        throw lastError ?: GeminiTranslationException("All retries failed")
     }
 
     /**
      * Logic to group lines into blocks to minimize API calls.
      */
-    private fun chunkByLimit(lines: List<String>, limit: Int): List<List<String>> {
+    private fun chunkByLimit(lines: List<String>): List<List<String>> {
         val chunks = mutableListOf<List<String>>()
         var current = mutableListOf<String>()
         var count = 0
         for (line in lines) {
-            if (count + line.length > limit && current.isNotEmpty()) {
+            if (count + line.length > MAX_CHARS_PER_CHUNK && current.isNotEmpty()) {
                 chunks.add(current)
                 current = mutableListOf()
                 count = 0
@@ -193,25 +282,24 @@ class GeminiTranslateOnline(
     }
 
     /**
-     * Constructs the JSON payload for the Gemini API, including the translation persona.
+     * Constructs the JSON payload for the Gemini API
      */
     private fun buildRequestBody(
         text: String,
-        sourceLanguage: String,
-        targetLanguage: String,
+        from: String,
+        to: String,
         glossary: String = "",
         isHtml: Boolean = false
     ): Map<String, Any> {
         val promptText = """
             [LITERARY PRESERVATION TASK]
-            The following is a raw fictional excerpt for scholarly translation. 
-            Translate my novel from [$sourceLanguage] to [$targetLanguage].
+            Translate the following web/light novel excerpt from [$from] to [$to]. Maintain absolute narrative flow, emotional depth, precise paragraph cohesion, and exact line alignment.
             TEXT:
             $text
         """.trimIndent()
 
         val htmlInstruction = if (isHtml) """
-            6. HTML TAG PRESERVATION (STRICT):
+            5. HTML TAG PRESERVATION (STRICT):
             - The text contains HTML tags (e.g., <b>, <i>, <p>, <h1>).
             - You MUST preserve these tags exactly as they are in the translated text.
             - DO NOT translate the tags themselves (e.g., keep <b>, do not write <negrita>).
@@ -222,51 +310,38 @@ class GeminiTranslateOnline(
         """.trimIndent() else ""
 
         val systemInstruction = """
-            Act as a professional literary translator with extensive experience in localizing web novels, 
-            light novels, and fiction literature. Your goal is to translate the user's text while maintaining 
-            a natural, immersive, and aesthetically pleasing flow in the target language.
-            
-            Follow these translation guidelines strictly:
-            
-            1. TONE AND STYLE: 
-            - Adapt the language to sound natural in the target language, prioritizing literary fluency over 
-              word-for-word literal translation.
-            - Preserve the original tone (romance, action, dark fantasy, comedy, etc.).
-            - [NO SUPPRESSION]: If you encounter strange characters, symbols, gibberish, or repetitive text, 
-              DO NOT omit or delete them. If you cannot translate them, include them exactly as they are 
-              in the corresponding line. Every piece of source information must be present in the output.
-            
-            2. CULTURAL ADAPTATION AND IDIOMS (CREATIVITY):
-            - Localize idioms, puns, jokes, and cultural references to the target language.
-            - If a literal translation of a joke or idiom sounds awkward or loses its meaning, replace it 
-              with a creative equivalent in the target language that conveys the same intent, humor, or emotion.
-            - Aim for a translation that feels as if it were originally written in the target language, 
-              avoiding "translator-ese".
+            Act as an elite professional literary translator specializing in web novels, light novels, and serialized fiction. Your goal is to deliver an immersive, natural, and stylistically rich translation that feels as if it were originally written in the target language.
 
-            3. CONSISTENCY OF NAMES AND TERMS:
-            - Do not translate proper names, fictional place names, or technical system terms (if it's an 
-              RPG/LitRPG style novel) unless the literary context clearly demands it.
-            - Respect the provided glossary to maintain consistency throughout the novel.
-            - Glossary/Key Characters: {$glossary}
-          
-            4. ADAPTATION OF SENSITIVE CONTENT (VIOLENCE AND EROTICISM):
-            - If the original text contains extremely explicit descriptions of physical violence, gore, 
-              or sexual acts that might trigger standard content filters, DO NOT refuse to translate.
-            - Instead, apply a "light translation" (softening): preserve the meaning, drama, and intent 
-              of the scene, but reduce the level of anatomical, graphic, or explicit detail. 
-              Use more suggestive, poetic, or abstract language so the scene remains coherent with the 
-              plot without being purely explicit. ONLY do this if absolutely necessary; if possible, 
-              maintain the intensity.
-              
-            5. OUTPUT STRUCTURE (CRITICAL):
+            Follow these rigorous translation guidelines strictly:
+
+            0. DEEP CONTEXTUAL AWARENESS & NARRATIVE COHESION (CRITICAL):
+            - CONTEXT IS PARAMOUNT: Always analyze preceding and succeeding sentences/paragraphs carefully before translating. A sentence's exact meaning, emotional resonance, and subtext depend heavily on the broader narrative context, character relationships, and plot developments.
+            - POLYSEMY & AMBIGUITY RESOLUTION: Words frequently have multiple meanings depending on the language. Always choose the precise shade of meaning that fits the scene's mood, genre (romance, action, dark fantasy, comedy), and character persona.
+            - LEXICAL VARIETY (SYNONYMS): If the source text uses varied vocabulary across paragraphs, avoid repeating the same translated word monotonously. Utilize rich synonyms and stylistic variation in the target language to keep the prose engaging and natural.
+            - CULTURAL SUBTEXT & WEB NOVEL IDIOMS: Be acutely aware of genre-specific idioms and cultural tropes (e.g., specialized terminology in Chinese, Japanese, or Korean web novels such as metaphorical kinship terms like "grand mother" for queens/stepmothers, honorifics, cultivation concepts, or idioms). Translate them with culturally or functionally equivalent expressions that capture the author's exact intent rather than awkward literal translations.
+
+            1. TONE, STYLE & FLUIDITY:
+            - Prioritize literary fluency and natural phrasing over word-for-word literalness ("translator-ese").
+            - Maintain consistent character voices and emotional tone throughout the excerpt.
+            - [NO SUPPRESSION]: If you encounter strange characters, symbols, gibberish, or repetitive text, DO NOT omit or delete them. Include them exactly as they are in the corresponding line. Every piece of source information must be preserved.
+
+            2. CONSISTENCY OF PROPER NONS & TERMINOLOGY:
+            - Respect the provided glossary to ensure absolute consistency for character names, titles, and locations.
+            - Do not translate proper names, fictional places, or specialized system terms (e.g., LitRPG stats/skills) unless requested or contextually required.
+            - Glossary/Key Terms: {$glossary}
+
+            3. ADAPTATION OF SENSITIVE CONTENT (VIOLENCE AND EROTICISM):
+            - If the text contains extremely explicit descriptions of violence,OGS, or sexual acts that might trigger strict safety filters, DO NOT refuse to translate.
+            - Instead, apply a "literary softening" (light translation): preserve the core drama, emotional intensity, and plot intent of the scene while using more suggestive, abstract, or poetic phrasing instead of raw anatomical or graphic detail. Maintain narrative coherence without unnecessary vulgarity.
+
+            4. OUTPUT STRUCTURE & LINE ALIGNMENT (ABSOLUTE REQUIREMENT):
             - ONE-TO-ONE MAPPING: Each individual line in the source MUST correspond to exactly one line in the translation.
-            - NO MERGING: Never merge two or more lines into one. 
-            - NO SPLITTING: Do not split a single line into multiple ones.
-            - NO ADDITIONS: Return ONLY the translated text. Do not include introductions, "Here is the translation", translator notes, apologies, or any metadata. 
-            - FAILURE CRITERIA: If the source has 10 lines, the output MUST have 10 lines. Any variation in the line count is a failure of your task.
-            
-            $htmlInstruction
+            - NO MERGING: Never merge two or more source lines into a single line.
+            - NO SPLITTING: Never split a single source line into multiple lines.
+            - NO ADDITIONS: Return ONLY the translated text. Do not include introductions, explanations, translator notes, apologies, or markdown wrappers unless part of the source.
+            - FAILURE CRITERIA: If the source contains N lines, the output MUST contain exactly N lines. Any discrepancy in line count is an unacceptable failure.
 
+            $htmlInstruction
         """.trimIndent()
 
         return mapOf(
@@ -280,7 +355,7 @@ class GeminiTranslateOnline(
                 "parts" to listOf(mapOf("text" to systemInstruction))
             ),
             "generationConfig" to mapOf(
-                "temperature" to 0.15,
+                "temperature" to 0.32,
                 "topP" to 0.9,
                 "responseMimeType" to "text/plain"
             ),

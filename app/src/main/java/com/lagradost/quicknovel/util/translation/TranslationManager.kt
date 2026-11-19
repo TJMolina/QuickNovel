@@ -18,6 +18,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
+import kotlin.lazy
 
 fun Translator?.closeQuietly() {
     try {
@@ -171,7 +172,7 @@ class TranslationManager {
         val client = prepareModel(from, to) ?: throw Exception("Offline model not available")
         return textList.mapIndexed { index, text ->
             currentCoroutineContext().ensureActive()
-            val textToTranslate = TranslationsUtils.isTranslatable(text, isHtml) ?: return@mapIndexed text
+            val textToTranslate = TranslationsUtils.getTranslatableText(text, isHtml) ?: return@mapIndexed text
             val decodedText = HtmlCompat.fromHtml(textToTranslate, HtmlCompat.FROM_HTML_MODE_LEGACY).toString()
             val translatedText = Tasks.await(client.translate(decodedText))
             progress(index + 1, textList.size)

@@ -128,7 +128,7 @@ object TranslationsUtils {
         return text.replace(Regex("[\u200B-\u200F\uFEFF]"), "")
     }
 
-    fun isTranslatable(text: String, isHtml: Boolean): String? {
+    fun getTranslatableText(text: String, isHtml: Boolean): String? {
         if (text.isBlank()) return null
         val sanitized = sanitize(text)
         return if (isHtml) {

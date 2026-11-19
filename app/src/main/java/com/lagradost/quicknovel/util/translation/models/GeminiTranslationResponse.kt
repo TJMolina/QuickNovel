@@ -23,8 +23,13 @@ data class GeminiErrorResponse(
     @JsonProperty("status") val status: String? = null,
     @JsonProperty("details") val details: List<GeminiErrorDetail>? = null
 )
-
-
 data class GeminiErrorDetail(
-    @JsonProperty("retryDelay") val retryDelay: String? = null,
+    @JsonProperty("retryDelay") val retryDelay: Any? = null,
 )
+
+open class GeminiTranslationException(message: String) : Exception(message)
+class GeminiApiException(message: String) : GeminiTranslationException(message)
+class GeminiRateLimitException(message: String) : GeminiTranslationException(message)
+class GeminiOverloadException(message: String) : GeminiTranslationException(message)
+class GeminiSafetyError(message: String) : GeminiTranslationException(message)
+class GeminiEmptyResponseException(message: String) : GeminiTranslationException(message)

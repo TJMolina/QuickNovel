@@ -269,6 +269,7 @@
     <string name="sleep_timer">Sleep</string>
     <string name="sleep_format">%d min</string>
     <string name="sleep_format_stop">TTS will stop in %d min</string>
+    <string name="gemini_translate">Gemini</string>
     <string name="google_translate">Google translate</string>
     <string name="online_translate">Online translation</string>
     <string name="translate_from">Translate from language</string>

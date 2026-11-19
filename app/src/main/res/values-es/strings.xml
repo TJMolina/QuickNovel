@@ -193,6 +193,7 @@
 
 
     <!-- Traducción -->
+    <string name="gemini_translate">Gemini</string>
     <string name="google_translate">Traductor de Google</string>
     <string name="online_translate">Traducción online</string>
     <string name="translate_from">Traducir desde el idioma</string>

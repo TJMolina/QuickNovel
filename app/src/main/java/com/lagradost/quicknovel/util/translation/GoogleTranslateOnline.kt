@@ -11,12 +11,10 @@ import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.util.translation.models.FailedContext
 import com.lagradost.quicknovel.util.translation.models.GoogleTranslationResponse
 import com.lagradost.quicknovel.util.translation.models.TranslationResult
-import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 import kotlin.reflect.KClass
-import kotlin.time.Duration.Companion.seconds
 
 class GoogleTranslateOnline {
     data class FragmentMeta(val shell: String, val content: String, val originalIndex: Int, val tags: List<String>)
@@ -145,7 +143,7 @@ class GoogleTranslateOnline {
         val contentFragments = mutableListOf<FragmentMeta>()
 
         textList.forEachIndexed { index, text ->
-            if (TranslationsUtils.isTranslatable(text, isHtml) != null) {
+            if (TranslationsUtils.getTranslatableText(text, isHtml) != null) {
                 if (isHtml) {
                     val (shell, content, tags) = TranslationsUtils.extractDeepShell(text)
                     contentFragments.add(FragmentMeta(shell, TranslationsUtils.sanitize(content), index, tags))

@@ -41,6 +41,7 @@ import com.lagradost.quicknovel.ui.common.updateRow
 import com.lagradost.quicknovel.ui.common.updateRows
 import com.lagradost.quicknovel.ui.download.DownloadDialog.*
 import com.lagradost.quicknovel.util.ResultCached
+import com.lagradost.quicknovel.util.updates.data.UpdatesManager
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentHashMap
@@ -323,12 +324,15 @@ class DownloadViewModel2 : ViewModel(),
                         action.response.name,
                         action.response.apiName
                     )
+                    updateState { copy(dialog = null) }
                 } else {
                     removeKey(RESULT_BOOKMARK, id.toString())
                     removeKey(RESULT_BOOKMARK_STATE, id.toString())
+                    UpdatesManager.removeFromWatchList(id)
 
                     updateState {
                         copy(
+                            dialog = null,
                             pages = pages.updateRows { index ->
                                 if (index != 0) {
                                     delete(id)

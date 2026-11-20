@@ -18,6 +18,7 @@ import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.setStatus
 import com.lagradost.quicknovel.util.AppUtils.parseJson
+import com.lagradost.quicknovel.util.CommonHeaders
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -122,6 +123,7 @@ class WtrLabProvider : MainAPI() {
             val name = titleHolder.attr("title")
             newSearchResponse(name, href) {
                 posterUrl = fixUrlNull(select.selectFirst("a img")?.attr("src"))
+                posterHeaders = mapOf(CommonHeaders.useCloudflareKillerHeader to "false")
             }
         }
         return HeadMainPageResponse(url, returnValue)
@@ -247,7 +249,7 @@ class WtrLabProvider : MainAPI() {
         try {
             val doc = app.get(urlWithService).document
             val jsonNode = doc.selectFirst("#__NEXT_DATA__")
-            val json = jsonNode?.data() ?: throw ErrorLoadingException("No se encontró JSON de capítulos")
+            val json = jsonNode?.data() ?: throw ErrorLoadingException("No content")
             val chaptersJson = parseJson<LoadJsonResponse.Root>(json)
             val chapter = chaptersJson.props.pageProps.serie
 
@@ -272,8 +274,9 @@ class WtrLabProvider : MainAPI() {
             }
             return text.toString()
         } catch (e: Exception) {
-            val script = """
+            WebViewResolver(scriptToFinish = """
                              (function() {
+                                 clearInterval(checkInterval);
                                  var checkInterval = setInterval(function() {
                                      var element = document.querySelector("div.chapter-body");
                                      var firstLine = element ? element.querySelector("div[data-line]") : null;
@@ -284,8 +287,10 @@ class WtrLabProvider : MainAPI() {
                                  }, 1000);
                                  setTimeout(function() { clearInterval(checkInterval); }, 30000);
                              })();
-                         """.trimIndent()
-            return WebViewResolver(scriptToFinish = script, useOkhttp = false).resolveUsingWebView(urlWithService)
+                         """.trimIndent()).getHtml(
+                url = urlWithService,
+            )
+            return null //retry loadhtml with new cookies
         }
     }
 
@@ -753,19 +758,19 @@ class WtrLabProvider : MainAPI() {
         )
 
         data class Data(
-            val title: String,
-            val author: String,
-            val description: String,
+            val title: String? = null,
+            val author: String? = null,
+            val description: String? = null,
             @JsonProperty("from_user")
-            val fromUser: String?,
-            val raw: Raw,
-            val image: String,
+            val fromUser: String? = null,
+            val raw: Raw? = null,
+            val image: String? = null,
         )
 
         data class Raw(
-            val title: String,
-            val author: String,
-            val description: String,
+            val title: String? = null,
+            val author: String? = null,
+            val description: String? = null,
         )
 
         data class Query(

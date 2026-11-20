@@ -1,8 +1,10 @@
 package com.lagradost.quicknovel.util
 
 object CommonHeaders  {
-    val useCloudflareKillerHeader = "useCloudflareKiller" to "true"
+    val useCloudflareKillerHeader = "useCloudflareKiller"
     val useIgnore500Header = "useIgnore500" to "true"
+    val cloudflareKillerWaitSelectorHeader = "X-Cloudflare-Wait-Selector"
+    val cloudflareKillerWaitScriptHeader = "X-Cloudflare-Wait-Script"
 
     fun ajaxHeaders(refer:String = "") =
         if(refer.isNotEmpty())

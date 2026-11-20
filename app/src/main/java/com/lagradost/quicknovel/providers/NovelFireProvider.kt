@@ -25,7 +25,8 @@ open class NovelFireProvider : MainAPI() {
     override val name = "NovelFire"
     override val mainUrl = "https://novelfire.net"
     override val iconId = R.drawable.icon_novelfire
-    override val rateLimitTime = 500L
+    override val rateLimitTime = 800L
+    override val usesCloudFlareKiller = true
     override val hasMainPage = true
     override val hasReviews = true
     //novel phoenix uses novel instead of book
@@ -107,7 +108,6 @@ open class NovelFireProvider : MainAPI() {
         val url = "$mainUrl/genre-${tag}/${orderBy}/${mainCategory}/all-novel?page=$page"
         val document = app.get(url).document
 
-
         val returnValue = document.select("li.novel-item").mapNotNull { select ->
             val node = select.selectFirst("a[title]") ?: return@mapNotNull null
             val href = node.attr("href")
@@ -131,7 +131,7 @@ open class NovelFireProvider : MainAPI() {
 
 
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url, allowRedirects = true).document
+        val document = app.get(url).document
         val infoDiv = document.select("div.novel-info")
 
         val title = infoDiv.selectFirst("h1.novel-title")?.text()
@@ -211,7 +211,7 @@ open class NovelFireProvider : MainAPI() {
         return response.data?.mapNotNull { item ->
             val nSort = item.nSort ?: return@mapNotNull null
 
-            val rawTitle = item.title ?: "Chapter $nSort"
+            val rawTitle = "Ch $nSort. ${item.title}"
             val chapterUrl = "$mainUrl/$sectionUrl/$bookSlug/chapter-$nSort"
             newChapterData(rawTitle, chapterUrl) {
                 this.dateOfRelease = item.createdAt
@@ -284,7 +284,7 @@ open class NovelFireProvider : MainAPI() {
     }
 
     override suspend fun loadHtml(url: String): String? {
-        val document = app.get(url).document
+        val document = app.get(url.replace("https://novelfire.net/book/","https://novelphoenix.com/novel/")).document
         var title = document.selectFirst("span.chapter-title")?.text() ?: ""
         val contentElement = document.selectFirst("div#content")?.apply {
             selectFirst("p")?.let { p ->
@@ -306,7 +306,7 @@ open class NovelFireProvider : MainAPI() {
         return document.select("ul.novel-list.horizontal.col2.chapters li.novel-item")
             .mapNotNull { element ->
                 val a = element.selectFirst("a") ?: return@mapNotNull null
-                val title = a.attr("title").trim()
+                val title = a.attr("title").takeIf { it.isNotBlank() }?.trim() ?: a.selectFirst("h4")?.text() ?: ""
                 val novelUrl = a.attr("href")
                 val coverUrl = fixUrlNull(a.selectFirst("img")?.attr("src"))
                 newSearchResponse(title, novelUrl) {

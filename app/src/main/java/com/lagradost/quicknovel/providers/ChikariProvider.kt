@@ -2,6 +2,7 @@ package com.lagradost.quicknovel.providers
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.quicknovel.ChapterData
+import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HeadMainPageResponse
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
@@ -24,27 +25,84 @@ object ChikariProvider : MainAPI() {
     override val hasReviews = true
     override val lang = "en"
 
+    override val orderBys = listOf(
+        "Popular" to "popular",
+        "Trending" to "trending",
+        "Top Rated" to "top_rated",
+        "Recently Updated" to "updated",
+        "Recently Added" to "added",
+        "Most Bookmarked" to "most_bookmarked"
+    )
+
+    override val tags = listOf(
+        "Action" to "action",
+        "Adventure" to "adventure",
+        "Comedy" to "comedy",
+        "Drama" to "drama",
+        "Ecchi" to "ecchi",
+        "Fantasy" to "fantasy",
+        "Gender Bender" to "gender_bender",
+        "Harem" to "harem",
+        "Historical" to "historical",
+        "Horror" to "horror",
+        "Josei" to "josei",
+        "Martial Arts" to "martial_arts",
+        "Mature" to "mature",
+        "Mecha" to "mecha",
+        "Mystery" to "mystery",
+        "Psychological" to "psychological",
+        "Romance" to "romance",
+        "School Life" to "school_life",
+        "Sci-Fi" to "sci_fi",
+        "Seinen" to "seinen",
+        "Shoujo" to "shoujo",
+        "Shoujo Ai" to "shoujo_ai",
+        "Shounen" to "shounen",
+        "Shounen Ai" to "shounen_ai",
+        "Slice of Life" to "slice_of_life",
+        "Sports" to "sports",
+        "Supernatural" to "supernatural",
+        "Tragedy" to "tragedy",
+        "Yaoi" to "yaoi",
+        "Yuri" to "yuri"
+    )
+
     override suspend fun loadMainPage(
         page: Int,
         mainCategory: String?,
         orderBy: String?,
         tag: String?
     ): HeadMainPageResponse {
-        val offset = (page - 1) * 20
-        val url = "$apiUrl/novels?q=all&limit=20&offset=$offset"
-        
+        val limit = 20
+        val offset = (page - 1) * limit
+        val url = "$apiUrl/series?type=novel&sort=$orderBy&limit=$limit&offset=$offset&genre=$tag"
+
         val root = app.get(url).parsed<ApiNovelsRoot>()
 
         val novels = root.items?.map { item ->
             newSearchResponse(
-                name = item.title,
+                name = item.title ?: "Unknown",
                 url = "$mainUrl/novels/${item.slug}/"
             ) {
-                posterUrl = item.cover
+                posterUrl = item.cover ?: "https://cdn.chikari.moe/novels/${item.id}/cover.webp"
             }
         }.orEmpty()
-       
+
         return HeadMainPageResponse(url, novels)
+    }
+
+    override suspend fun search(query: String): List<SearchResponse> {
+        val encodedQuery = URLEncoder.encode(query, "UTF-8")
+        val url = "$apiUrl/novels/search?q=$encodedQuery&limit=50"
+        val items = app.get(url).parsed<Array<ApiSearchItem>>()
+        return items.map { item ->
+            newSearchResponse(
+                name = item.title ?: "Unknown",
+                url = "$mainUrl/novels/${item.slug}/"
+            ) {
+                posterUrl = item.cover ?: "https://cdn.chikari.moe/novels/${item.id}/cover.webp"
+            }
+        }
     }
 
     override suspend fun load(url: String): LoadResponse {
@@ -54,7 +112,7 @@ object ChikariProvider : MainAPI() {
 
         return newStreamResponse(data.title, url, chapters) {
             author = data.authors?.joinToString { it.name ?: "" }
-            posterUrl = data.cover
+            posterUrl = data.cover ?: "https://cdn.chikari.moe/novels/${data.id}/cover.webp"
             synopsis = data.description
             tags = (data.genres?.mapNotNull { it.name } ?: emptyList()) + (data.tags?.mapNotNull { it.name } ?: emptyList())
             setStatus(data.status)
@@ -86,18 +144,6 @@ object ChikariProvider : MainAPI() {
         return text.trim().split(Regex("\n\n+"))
             .joinToString(separator = "") { "<p>${it.replace("\n", "<br>")}</p>" }
     }
-    override suspend fun search(query: String): List<SearchResponse> {
-        val root = app.get("$apiUrl/novels?q=${URLEncoder.encode(query, "UTF-8")}").parsed<ApiNovelsRoot>()
-
-        return root.items?.map { item ->
-            newSearchResponse(
-                name = item.title,
-                url = "$mainUrl/novels/${item.slug}/"
-            ) {
-                posterUrl = item.cover
-            }
-        }.orEmpty()
-    }
 
     override suspend fun loadReviews(url: String, page: Int, data: String?): List<UserReview> {
         val slug = url.removeSuffix("/").substringAfterLast("/")
@@ -123,8 +169,8 @@ object ChikariProvider : MainAPI() {
 
     data class ApiSearchItem(
         @JsonProperty("id") val id: Int,
-        @JsonProperty("slug") val slug: String,
-        @JsonProperty("title") val title: String,
+        @JsonProperty("slug") val slug: String?,
+        @JsonProperty("title") val title: String?,
         @JsonProperty("type") val type: String?,
         @JsonProperty("status") val status: String?,
         @JsonProperty("cover_url") val cover: String?,
@@ -156,7 +202,6 @@ object ChikariProvider : MainAPI() {
         @JsonProperty("title") val title: String?,
         @JsonProperty("created_at") val createdAt: String?,
         @JsonProperty("body") val body: String?,
-
     )
 
     data class ApiCommentRoot(
